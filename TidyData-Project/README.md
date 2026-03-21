@@ -44,5 +44,3 @@ Pre-processing: Reworked broad-format data to a long format for ease of analysis
 References
 Pandas Cheat Sheet, https://www.geeksforgeeks.org/pandas-cheat-sheet/
 Tidy Data Paper, https://vita.had.co.nz/papers/tidy-data.pdf 
-
-Example Visuals
