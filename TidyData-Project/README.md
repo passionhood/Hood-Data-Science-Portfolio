@@ -66,10 +66,11 @@ df_melted.pivot_table(
 ## Visualizations
 ### Total Federal R&D Spending Over Time
 A line chart illustrating overall trends in government R&D expenditures.
+![Line Plot](Visualizations/spending_line_plot.png)
 
 ### Departmental Budget Comparison (Most Recent Year)
 A horizontal bar chart comparing departmental R&D budgets for the latest available year.
-
+![Bar Chart](Visualizations/budgets_bar_chart.png)
 
 ## How to Run the Project
 ### Requirements
