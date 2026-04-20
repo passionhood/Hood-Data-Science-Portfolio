@@ -7,9 +7,8 @@ from pathlib import Path
 st.title(" Cryptocurrency Dashboard")
 st.write(" App started (if you see this, Streamlit is running this file).")
 
-# -------------------------
 # Load the data (robust)
-# -------------------------
+# 
 # Try both possible filenames
 possible_paths = [
     Path(__file__).parent / "CryptocurrencyData copy.csv",
