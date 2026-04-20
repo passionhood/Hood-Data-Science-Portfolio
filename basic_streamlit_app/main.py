@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 # Always show something immediately
-st.title("📊 Cryptocurrency Dashboard")
-st.write("✅ App started (if you see this, Streamlit is running this file).")
+st.title(" Cryptocurrency Dashboard")
+st.write(" App started (if you see this, Streamlit is running this file).")
 
 # -------------------------
 # Load the data (robust)
@@ -26,18 +26,18 @@ for path in possible_paths:
 
 if csv_path is None:
     # List files in current directory for debugging
-    st.error("❌ Could not find CSV file")
+    st.error(" Could not find CSV file")
     st.write("Files in current directory:", list(Path(__file__).parent.glob("*.csv")))
     st.write("Files in data directory:", list(Path(__file__).parent.glob("data/*.csv")))
     st.stop()
 
-st.write(f"✅ Using CSV from: {csv_path}")
+st.write(f" Using CSV from: {csv_path}")
 
 try:
     df = pd.read_csv(csv_path)
-    st.write(f"✅ CSV loaded! Shape: {df.shape}")
+    st.write(f" CSV loaded! Shape: {df.shape}")
 except Exception as e:
-    st.error("❌ Could not load the CSV file.")
+    st.error(" Could not load the CSV file.")
     st.exception(e)
     st.stop()
 
@@ -81,14 +81,14 @@ st.dataframe(df.head(10), use_container_width=True)
 st.sidebar.header("Filters")
 
 if "Coin Name" not in df.columns:
-    st.error("❌ Your CSV is missing the 'Coin Name' column.")
+    st.error(" Your CSV is missing the 'Coin Name' column.")
     st.write("Columns found:", df.columns.tolist())
     st.stop()
 
 coin_names = sorted(df["Coin Name"].dropna().unique().tolist())
 
 if not coin_names:
-    st.error("❌ No coin names found in the data")
+    st.error(" No coin names found in the data")
     st.stop()
 
 coin = st.sidebar.selectbox("Choose a cryptocurrency:", coin_names)
