@@ -114,7 +114,7 @@ openpyxl>=3.10.0
 
 ## Live Deployment
 
- **Access the deployed app**: [Investment Risk Analyzer on Streamlit Cloud](http://localhost:8511/)
+ **Access the deployed app**: [Investment Risk Analyzer on Streamlit Cloud](https://hood-data-science-portfolio-5snejofrhraukzd95hbjb6.streamlit.app/)
 
 The app is published to Streamlit Community Cloud and is fully functional without any local setup required.
 
