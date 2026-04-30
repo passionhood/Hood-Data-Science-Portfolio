@@ -1,4 +1,4 @@
-#  Investment Risk Analyzer - Machine Learning Streamlit Application
+# Investment Risk Analyzer - Machine Learning Streamlit Application
 # Author: Passion Hood
 # Course: MDSC 20009: Machine Learning for Data Science
 # Description: Interactive web application for financial data analysis and
