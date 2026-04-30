@@ -1,0 +1,9 @@
+streamlit
+pandas
+numpy
+scikit-learn
+plotly
+matplotlib
+scipy
+openpyxl
+streamlit-option-menu==0.3.6 

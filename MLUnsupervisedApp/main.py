@@ -1,426 +1,1220 @@
 # Investor Persona Clustering App
 # Author: Passion Hood
 # Course: MDSC 20009: Machine Learning for Data Science
-# Description: This Streamlit app demonstrates unsupervised machine learning by allowing users to cluster investor behavior data using K-Means, Hierarchical Clustering, and PCA.
-# Main features:
-# - Upload a custom CSV or Excel dataset
-# - Use a built-in simulated investor persona dataset
-# - Select numeric features for clustering
-# - Adjust the number of clusters interactively
-# - View PCA visualizations, elbow plots, silhouette scores, dendrograms, and cluster summaries
-# - Download the final dataset with assigned cluster labels
+#
+# Project Purpose:
+# This Streamlit application demonstrates unsupervised machine learning by
+# identifying hidden investor behavior profiles. Users can either use a built-in
+# sample investor dataset or upload their own tabular dataset. The app allows
+# users to select numeric features, tune clustering parameters, and interpret
+# results through K-Means clustering, PCA, hierarchical clustering, silhouette
+# scores, elbow plots, and dendrograms.
 
-import io
+# ------------------------------------------------------------
+# 1. Imports
+# ------------------------------------------------------------
 
+# os is used to build file paths that work locally and on Streamlit Cloud.
+import os
+
+# numpy and pandas are used for numerical operations and tabular data handling.
 import numpy as np
 import pandas as pd
+
+# Streamlit is the framework used to build the interactive web app.
 import streamlit as st
+
+# Plotly is used for interactive visualizations such as histograms, heatmaps,
+# PCA scatterplots, and elbow plots.
+import plotly.express as px
+import plotly.graph_objects as go
+
+# Matplotlib is used for the hierarchical clustering dendrogram.
 import matplotlib.pyplot as plt
 
-from scipy.cluster.hierarchy import linkage, dendrogram
+# streamlit-option-menu is used to create the clean sidebar navigation menu.
+from streamlit_option_menu import option_menu
+
+# Scikit-learn tools used for preprocessing and unsupervised machine learning.
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans, AgglomerativeClustering
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+
+# SciPy is used to calculate and display hierarchical clustering structure.
+from scipy.cluster.hierarchy import linkage, dendrogram
 
 
-# Page configuration
+# ------------------------------------------------------------
+# 2. Page Configuration
+# ------------------------------------------------------------
+
+# Configure the browser tab title and make the app use the full page width.
 st.set_page_config(
     page_title="Investor Persona Clustering App",
-    page_icon="📊",
-    layout="wide"
+    layout="wide",
 )
 
-# Helper function: create a sample investor dataset
-@st.cache_data
-def generate_sample_dataset(seed: int = 42) -> pd.DataFrame:
-    """
-    Generates a simulated investor behavior dataset.
 
-    The dataset includes five broad investor archetypes with realistic variation,
-    plus a few noisy observations to make the clustering task less perfect and
-    more reflective of real-world data.
+# ------------------------------------------------------------
+# 3. Custom Styling
+# ------------------------------------------------------------
+
+# Custom CSS is used to make the app visually consistent with the user's
+# previous Investment Risk Analyzer app. This creates cleaner spacing,
+# styled metric cards, and a polished sidebar.
+st.markdown(
     """
-    np.random.seed(seed)
+    <style>
+    /* Limit the main content width and add vertical spacing */
+    .block-container {
+        max-width: 1200px;
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+
+    /* Light sidebar background to separate controls from main content */
+    section[data-testid="stSidebar"] {
+        background-color: #f5f6fa;
+    }
+
+    /* Card-style formatting for Streamlit metric boxes */
+    div[data-testid="stMetric"] {
+        border: 1px solid rgba(49, 51, 63, 0.10);
+        border-radius: 14px;
+        padding: 12px 16px;
+        background-color: white;
+    }
+
+    /* Reusable card style for cluster interpretation text */
+    .insight-card {
+        border: 1px solid rgba(49, 51, 63, 0.12);
+        border-radius: 14px;
+        padding: 16px 18px;
+        background-color: #ffffff;
+        margin-bottom: 12px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# ------------------------------------------------------------
+# 4. File Paths and App Constants
+# ------------------------------------------------------------
+
+# Get the folder where main.py is located. This makes file paths reliable
+# whether the app is running locally or deployed on Streamlit Community Cloud.
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# The app checks for either a CSV or Excel version of the sample dataset.
+# This gives flexibility depending on which file is included in GitHub.
+SAMPLE_CSV_PATH = os.path.join(APP_DIR, "investor_persona_dataset_v2.csv")
+SAMPLE_XLSX_PATH = os.path.join(APP_DIR, "investor_persona_dataset.xlsx")
+
+# These are the intended numeric variables in the investor persona dataset.
+# They describe investor behavior, portfolio allocation, and risk exposure.
+INVESTOR_FEATURES = [
+    "portfolio_turnover",
+    "avg_holding_period_days",
+    "volatility_exposure",
+    "diversification_score",
+    "sector_concentration",
+    "num_holdings",
+    "cash_allocation_pct",
+    "international_exposure_pct",
+]
+
+# These columns are useful for identification or explanation, but should not
+# be selected automatically as machine learning features.
+NON_FEATURE_COLUMNS = [
+    "investor_id",
+    "true_persona",
+    "persona",
+    "cluster",
+    "cluster_name",
+    "kmeans_cluster",
+    "hierarchical_cluster",
+]
+
+
+# ------------------------------------------------------------
+# 5. Data Creation, Loading, and Cleaning Functions
+# ------------------------------------------------------------
+
+@st.cache_data
+def create_sample_investor_dataset() -> pd.DataFrame:
+    """
+    Create a built-in sample investor dataset.
+
+    This fallback dataset ensures the app always works, even if the external
+    sample file is missing from the project folder. The dataset is intentionally
+    designed with several investor archetypes plus a few noisy observations so
+    that clustering results are interpretable but not unrealistically perfect.
+    """
+    np.random.seed(42)
     rows = []
 
-    def add_group(
+    def add_cluster(
         n,
         persona,
         turnover,
-        holding_period,
-        volatility,
-        diversification,
-        sector_concentration,
+        hold,
+        vol,
+        div,
+        sector,
         holdings,
         cash,
-        international,
+        intl,
         noise=0.05,
     ):
-        """Adds simulated investors around a central persona profile."""
+        """
+        Add one group of investors centered around a behavioral persona.
+
+        Random variation is added around each persona profile so that the data
+        feels more realistic and clustering is not perfectly separated.
+        """
         for _ in range(n):
-            rows.append({
-                "investor_id": len(rows) + 1,
-                "true_persona": persona,
-                "portfolio_turnover": np.clip(np.random.normal(turnover, noise), 0, 1),
-                "avg_holding_period_days": max(1, int(np.random.normal(holding_period, holding_period * 0.10))),
-                "volatility_exposure": np.clip(np.random.normal(volatility, noise), 0, 1),
-                "diversification_score": np.clip(np.random.normal(diversification, noise), 0, 1),
-                "sector_concentration": np.clip(np.random.normal(sector_concentration, noise), 0, 1),
-                "num_holdings": max(1, int(np.random.normal(holdings, 3))),
-                "cash_allocation_pct": np.clip(np.random.normal(cash, noise), 0, 1),
-                "international_exposure_pct": np.clip(np.random.normal(international, noise), 0, 1),
-            })
+            rows.append(
+                [
+                    len(rows) + 1,
+                    persona,
+                    round(float(np.clip(np.random.normal(turnover, noise), 0, 1)), 4),
+                    int(max(1, np.random.normal(hold, hold * 0.10))),
+                    round(float(np.clip(np.random.normal(vol, noise), 0, 1)), 4),
+                    round(float(np.clip(np.random.normal(div, noise), 0, 1)), 4),
+                    round(float(np.clip(np.random.normal(sector, noise), 0, 1)), 4),
+                    int(max(1, np.random.normal(holdings, 3))),
+                    round(float(np.clip(np.random.normal(cash, noise), 0, 1)), 4),
+                    round(float(np.clip(np.random.normal(intl, noise), 0, 1)), 4),
+                ]
+            )
 
-    # Core investor groups intentionally designed for meaningful clustering.
-    add_group(10, "Aggressive Trader", 0.85, 30, 0.90, 0.30, 0.80, 8, 0.05, 0.20)
-    add_group(10, "Passive Long-Term Investor", 0.10, 380, 0.20, 0.85, 0.20, 30, 0.18, 0.45)
-    add_group(10, "Balanced Investor", 0.50, 180, 0.50, 0.60, 0.50, 20, 0.10, 0.30)
-    add_group(10, "Concentrated Growth Investor", 0.70, 90, 0.85, 0.40, 0.90, 10, 0.05, 0.20)
-    add_group(10, "Conservative Wealth Preserver", 0.18, 320, 0.22, 0.75, 0.28, 27, 0.35, 0.38)
+    # Five investor personas are simulated so the app can reveal meaningful
+    # segments through unsupervised learning.
+    add_cluster(10, "Aggressive Trader", 0.85, 30, 0.90, 0.30, 0.80, 8, 0.05, 0.20)
+    add_cluster(10, "Passive Long-Term Investor", 0.10, 380, 0.20, 0.85, 0.20, 30, 0.18, 0.45)
+    add_cluster(10, "Balanced Investor", 0.50, 180, 0.50, 0.60, 0.50, 20, 0.10, 0.30)
+    add_cluster(10, "Concentrated Growth Investor", 0.70, 90, 0.85, 0.40, 0.90, 10, 0.05, 0.20)
+    add_cluster(10, "Conservative Wealth Preserver", 0.18, 320, 0.22, 0.75, 0.28, 27, 0.35, 0.38)
 
-    # Add a few noisy rows to represent atypical investor behavior.
+    # Add a few noisy/outlier investors to reflect real-world ambiguity.
+    # These rows make the clustering task more realistic and less artificial.
     for _ in range(5):
-        rows.append({
-            "investor_id": len(rows) + 1,
-            "true_persona": "Noise / Outlier",
-            "portfolio_turnover": np.random.uniform(0, 1),
-            "avg_holding_period_days": int(np.random.uniform(10, 500)),
-            "volatility_exposure": np.random.uniform(0, 1),
-            "diversification_score": np.random.uniform(0, 1),
-            "sector_concentration": np.random.uniform(0, 1),
-            "num_holdings": int(np.random.uniform(5, 40)),
-            "cash_allocation_pct": np.random.uniform(0, 1),
-            "international_exposure_pct": np.random.uniform(0, 1),
-        })
+        rows.append(
+            [
+                len(rows) + 1,
+                "Noise / Outlier",
+                round(float(np.random.uniform(0, 1)), 4),
+                int(np.random.uniform(10, 500)),
+                round(float(np.random.uniform(0, 1)), 4),
+                round(float(np.random.uniform(0, 1)), 4),
+                round(float(np.random.uniform(0, 1)), 4),
+                int(np.random.uniform(5, 40)),
+                round(float(np.random.uniform(0, 1)), 4),
+                round(float(np.random.uniform(0, 1)), 4),
+            ]
+        )
 
-    return pd.DataFrame(rows)
+    columns = [
+        "investor_id",
+        "true_persona",
+        "portfolio_turnover",
+        "avg_holding_period_days",
+        "volatility_exposure",
+        "diversification_score",
+        "sector_concentration",
+        "num_holdings",
+        "cash_allocation_pct",
+        "international_exposure_pct",
+    ]
+
+    return pd.DataFrame(rows, columns=columns)
 
 
-# -----------------------------------------------------------------------------
-# Helper function: load uploaded data
-# -----------------------------------------------------------------------------
-def load_uploaded_file(uploaded_file) -> pd.DataFrame:
-    """Reads a user-uploaded CSV or Excel file into a DataFrame."""
+@st.cache_data
+def load_sample_data() -> pd.DataFrame:
+    """
+    Load the sample dataset used by the app.
+
+    Loading priority:
+    1. Use investor_persona_dataset_v2.csv if it exists.
+    2. Use investor_persona_dataset.xlsx if it exists.
+    3. Generate a built-in sample dataset if no file exists.
+
+    This design helps prevent deployment errors on Streamlit Cloud.
+    """
+    if os.path.exists(SAMPLE_CSV_PATH):
+        return pd.read_csv(SAMPLE_CSV_PATH)
+
+    if os.path.exists(SAMPLE_XLSX_PATH):
+        return pd.read_excel(SAMPLE_XLSX_PATH)
+
+    return create_sample_investor_dataset()
+
+
+@st.cache_data
+def get_sample_download_bytes() -> bytes:
+    """
+    Convert the sample dataset to CSV bytes for the download button.
+    """
+    sample_df = load_sample_data()
+    return sample_df.to_csv(index=False).encode("utf-8")
+
+
+@st.cache_data
+def load_uploaded_data(uploaded_file):
+    """
+    Load a user-uploaded CSV or Excel file.
+
+    Supporting both CSV and Excel makes the app easier for different users,
+    since tabular datasets often come in either format.
+    """
+    if uploaded_file is None:
+        return None
+
     file_name = uploaded_file.name.lower()
 
     if file_name.endswith(".csv"):
         return pd.read_csv(uploaded_file)
-    if file_name.endswith((".xlsx", ".xls")):
+
+    if file_name.endswith(".xlsx") or file_name.endswith(".xls"):
         return pd.read_excel(uploaded_file)
 
-    raise ValueError("Unsupported file type. Please upload a CSV or Excel file.")
+    return None
 
 
-# -----------------------------------------------------------------------------
-# Helper function: recommend a persona name based on cluster averages
-# -----------------------------------------------------------------------------
-def assign_persona_name(row: pd.Series) -> str:
+def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Assigns a plain-English investor persona using cluster-level feature averages.
+    Clean the dataset before analysis.
 
-    This is not part of the machine learning model itself. It is an interpretation
-    layer that helps users understand what each cluster likely represents.
+    This function standardizes column names and attempts to convert numeric-like
+    columns into numeric data types. Text columns, such as true_persona, remain
+    unchanged if they cannot be converted.
     """
-    turnover = row.get("portfolio_turnover", 0)
-    holding = row.get("avg_holding_period_days", 0)
-    volatility = row.get("volatility_exposure", 0)
-    diversification = row.get("diversification_score", 0)
-    sector = row.get("sector_concentration", 0)
-    cash = row.get("cash_allocation_pct", 0)
+    df = df.copy()
 
-    if turnover >= 0.65 and holding <= 120 and volatility >= 0.70:
-        return "Aggressive Traders"
-    if sector >= 0.70 and volatility >= 0.70 and diversification <= 0.50:
-        return "Concentrated Growth Investors"
-    if turnover <= 0.25 and holding >= 250 and diversification >= 0.70 and cash < 0.30:
-        return "Passive Long-Term Investors"
-    if cash >= 0.25 and volatility <= 0.40:
-        return "Conservative Wealth Preservers"
-    return "Balanced / Moderate Investors"
+    # Strip spaces from column names so later feature selection is consistent.
+    df.columns = [str(col).strip() for col in df.columns]
+
+    # Convert columns to numeric when possible. This helps uploaded datasets
+    # work properly with clustering and PCA.
+    for col in df.columns:
+        try:
+            df[col] = pd.to_numeric(df[col])
+        except Exception:
+            pass
+
+    return df
 
 
-# -----------------------------------------------------------------------------
-# App title and overview
-# -----------------------------------------------------------------------------
+def safe_for_display(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Prepare a dataframe for display in Streamlit.
+
+    Some object columns can create display issues, so this function converts
+    text columns to strings before showing them in st.dataframe().
+    """
+    display_df = df.copy()
+
+    for col in display_df.columns:
+        if display_df[col].dtype == "object":
+            display_df[col] = display_df[col].fillna("").astype(str)
+
+    return display_df
+
+
+def get_numeric_columns(df: pd.DataFrame) -> list:
+    """
+    Return numeric columns that contain at least one non-null value.
+
+    Clustering, PCA, and correlation analysis require numeric inputs.
+    """
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    return [col for col in numeric_cols if df[col].notna().sum() > 0]
+
+
+def get_default_features(df: pd.DataFrame) -> list:
+    """
+    Choose default machine learning features.
+
+    If the sample investor behavior features are available, the app selects
+    them by default. If a user uploads a different dataset, the app falls back
+    to other numeric columns while avoiding obvious ID or label columns.
+    """
+    numeric_cols = get_numeric_columns(df)
+
+    # Prioritize the intended investor behavior variables.
+    investor_defaults = [col for col in INVESTOR_FEATURES if col in numeric_cols]
+    if len(investor_defaults) >= 2:
+        return investor_defaults
+
+    # Fallback for uploaded datasets with different column names.
+    excluded = [col.lower() for col in NON_FEATURE_COLUMNS]
+    fallback = [col for col in numeric_cols if col.lower() not in excluded]
+
+    return fallback[: min(8, len(fallback))]
+
+
+# ------------------------------------------------------------
+# 6. Machine Learning Helper Functions
+# ------------------------------------------------------------
+
+def prepare_model_data(df: pd.DataFrame, selected_features: list, scale_data: bool = True):
+    """
+    Prepare selected columns for unsupervised machine learning.
+
+    Processing steps:
+    1. Select the user-chosen numeric features.
+    2. Fill missing values using the median.
+    3. Optionally standardize values using StandardScaler.
+
+    Scaling is important because K-Means and hierarchical clustering are
+    distance-based. Without scaling, a feature measured in large units
+    such as holding period days could overpower percentage-based features.
+    """
+    X_raw = df[selected_features].copy()
+
+    # Impute missing values so models do not fail on incomplete data.
+    imputer = SimpleImputer(strategy="median")
+    X_imputed = imputer.fit_transform(X_raw)
+
+    # Standardize features if selected by the user.
+    if scale_data:
+        scaler = StandardScaler()
+        X_processed = scaler.fit_transform(X_imputed)
+    else:
+        X_processed = X_imputed
+
+    return X_raw, X_processed
+
+
+def run_kmeans(X_processed, k: int):
+    """
+    Fit a K-Means clustering model.
+
+    K-Means groups observations by minimizing the distance between each
+    observation and its assigned cluster center.
+    """
+    model = KMeans(n_clusters=k, random_state=42, n_init=10)
+    labels = model.fit_predict(X_processed)
+    return labels, model
+
+
+def calculate_silhouette(X_processed, labels):
+    """
+    Calculate silhouette score for clustering quality.
+
+    Silhouette score compares how close an observation is to its own cluster
+    versus other clusters. Scores closer to 1 suggest clearer separation,
+    while scores near 0 suggest overlapping clusters.
+    """
+    unique_labels = np.unique(labels)
+
+    # Silhouette score requires at least 2 clusters and fewer clusters than rows.
+    if len(unique_labels) < 2 or len(unique_labels) >= len(labels):
+        return np.nan
+
+    return silhouette_score(X_processed, labels)
+
+
+def create_elbow_plot(X_processed, max_k: int = 10):
+    """
+    Create an elbow plot for K-Means.
+
+    The elbow plot shows inertia across different k values. Inertia measures
+    within-cluster compactness. A useful k often appears where the curve begins
+    flattening, meaning additional clusters provide smaller improvements.
+    """
+    max_k = min(max_k, len(X_processed) - 1)
+
+    if max_k < 2:
+        return None
+
+    k_values = list(range(2, max_k + 1))
+    inertia_values = []
+
+    # Fit K-Means repeatedly with different k values.
+    for k in k_values:
+        model = KMeans(n_clusters=k, random_state=42, n_init=10)
+        model.fit(X_processed)
+        inertia_values.append(model.inertia_)
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=k_values,
+            y=inertia_values,
+            mode="lines+markers",
+            name="Inertia",
+        )
+    )
+
+    fig.update_layout(
+        title="Elbow Plot",
+        xaxis_title="Number of Clusters (k)",
+        yaxis_title="Inertia",
+        template="plotly_white",
+        height=420,
+        margin=dict(l=20, r=20, t=50, b=20),
+    )
+
+    return fig
+
+
+def create_pca_dataframe(X_processed, labels=None):
+    """
+    Reduce the dataset to two principal components.
+
+    PCA transforms many numeric features into fewer components that preserve
+    as much variance as possible. This makes it easier to visualize clusters
+    in a two-dimensional scatterplot.
+    """
+    pca = PCA(n_components=2)
+    components = pca.fit_transform(X_processed)
+
+    pca_df = pd.DataFrame(components, columns=["PC1", "PC2"])
+
+    # Add cluster labels if provided so the PCA plot can be color-coded.
+    if labels is not None:
+        pca_df["Cluster"] = labels.astype(str)
+
+    return pca_df, pca
+
+
+def create_pca_scatter(pca_df: pd.DataFrame, title: str):
+    """
+    Create an interactive PCA scatterplot.
+    """
+    if "Cluster" in pca_df.columns:
+        fig = px.scatter(
+            pca_df,
+            x="PC1",
+            y="PC2",
+            color="Cluster",
+            title=title,
+            template="plotly_white",
+        )
+    else:
+        fig = px.scatter(
+            pca_df,
+            x="PC1",
+            y="PC2",
+            title=title,
+            template="plotly_white",
+        )
+
+    fig.update_layout(
+        height=500,
+        margin=dict(l=20, r=20, t=50, b=20),
+    )
+
+    return fig
+
+
+def create_cluster_summary(df: pd.DataFrame, selected_features: list, labels, cluster_col: str):
+    """
+    Summarize average feature values by cluster.
+
+    This table helps translate algorithmic cluster labels into meaningful
+    behavioral patterns by showing what each group looks like on average.
+    """
+    summary_df = df[selected_features].copy()
+    summary_df[cluster_col] = labels
+
+    summary = summary_df.groupby(cluster_col)[selected_features].mean().round(3)
+    summary["count"] = summary_df.groupby(cluster_col).size()
+
+    # Put count first so users can immediately see cluster size.
+    summary = summary[["count"] + selected_features]
+
+    return summary.reset_index()
+
+
+def describe_cluster(row: pd.Series) -> str:
+    """
+    Generate a plain-English interpretation of a cluster.
+
+    These rules are designed around the investor persona dataset. The goal is
+    to make the model output easier to understand for non-technical users.
+    """
+    turnover = row.get("portfolio_turnover", np.nan)
+    holding = row.get("avg_holding_period_days", np.nan)
+    volatility = row.get("volatility_exposure", np.nan)
+    diversification = row.get("diversification_score", np.nan)
+    sector = row.get("sector_concentration", np.nan)
+    cash = row.get("cash_allocation_pct", np.nan)
+
+    if pd.notna(turnover) and pd.notna(volatility) and pd.notna(holding):
+        if turnover >= 0.65 and volatility >= 0.70 and holding <= 120:
+            return "Aggressive Trader: high trading activity, short holding periods, and elevated volatility exposure."
+
+    if pd.notna(turnover) and pd.notna(diversification) and pd.notna(holding):
+        if turnover <= 0.25 and diversification >= 0.70 and holding >= 250:
+            return "Passive Long-Term Investor: low turnover, longer holding periods, and strong diversification."
+
+    if pd.notna(sector) and pd.notna(volatility):
+        if sector >= 0.75 and volatility >= 0.70:
+            return "Concentrated Growth Investor: high sector concentration with elevated risk exposure."
+
+    if pd.notna(cash) and pd.notna(volatility):
+        if cash >= 0.25 and volatility <= 0.35:
+            return "Conservative Wealth Preserver: higher cash allocation and lower volatility exposure."
+
+    return "Balanced or Mixed Investor: moderate behavior across several portfolio characteristics."
+
+
+def create_correlation_heatmap(df: pd.DataFrame, numeric_cols: list):
+    """
+    Create a correlation matrix heatmap.
+
+    The heatmap helps users see which numeric variables move together before
+    running clustering or PCA.
+    """
+    corr = df[numeric_cols].corr()
+
+    fig = px.imshow(
+        corr,
+        text_auto=".2f",
+        aspect="auto",
+        color_continuous_scale="RdBu_r",
+        title="Correlation Matrix",
+    )
+
+    fig.update_layout(
+        height=650,
+        template="plotly_white",
+        margin=dict(l=20, r=20, t=50, b=20),
+    )
+
+    return fig
+
+
+def create_dendrogram(X_processed, labels=None):
+    """
+    Create a hierarchical clustering dendrogram.
+
+    The dendrogram shows how observations merge together based on similarity.
+    Ward linkage is used because it tends to create compact, interpretable
+    clusters for numeric data.
+    """
+    linked = linkage(X_processed, method="ward")
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    dendrogram(
+        linked,
+        ax=ax,
+        labels=labels,
+        leaf_rotation=90,
+        leaf_font_size=8,
+    )
+
+    ax.set_title("Hierarchical Clustering Dendrogram")
+    ax.set_xlabel("Observations")
+    ax.set_ylabel("Distance")
+
+    plt.tight_layout()
+
+    return fig
+
+
+# ------------------------------------------------------------
+# 7. Sidebar Navigation and Dataset Controls
+# ------------------------------------------------------------
+
+with st.sidebar:
+    st.markdown("## Menu")
+
+    # Sidebar navigation mirrors the layout style of the previous app while
+    # changing the pages to match the unsupervised learning assignment.
+    page = option_menu(
+        "Navigation",
+        ["Overview", "Explore Data", "Clustering", "PCA Analysis", "Hierarchical Analysis"],
+        icons=["house", "bar-chart", "diagram-3", "graph-up", "share"],
+        menu_icon="list",
+        default_index=0,
+        styles={
+            "container": {
+                "padding": "0.8rem",
+                "background-color": "#ffffff",
+                "border-radius": "14px",
+            },
+            "icon": {
+                "color": "#2f2f3a",
+                "font-size": "22px",
+            },
+            "nav-link": {
+                "font-size": "18px",
+                "text-align": "left",
+                "margin": "8px 0px",
+                "padding": "14px 18px",
+                "border-radius": "10px",
+                "--hover-color": "#f4f4f4",
+            },
+            "nav-link-selected": {
+                "background-color": "#ff4b4b",
+                "color": "white",
+                "font-weight": "600",
+            },
+        },
+    )
+
+    st.markdown("---")
+    st.subheader("Dataset")
+
+    # Let users choose between the built-in investor dataset and their own file.
+    data_source = st.radio(
+        "Choose a data source:",
+        ["Use sample investor dataset", "Upload my own dataset"],
+    )
+
+    uploaded_file = None
+
+    # File uploader appears only when the user chooses to upload data.
+    if data_source == "Upload my own dataset":
+        uploaded_file = st.file_uploader(
+            "Upload a CSV or Excel file",
+            type=["csv", "xlsx", "xls"],
+        )
+
+    # Give users access to the sample dataset so they can inspect or reuse it.
+    st.download_button(
+        label="Download sample dataset",
+        data=get_sample_download_bytes(),
+        file_name="investor_persona_dataset.csv",
+        mime="text/csv",
+    )
+
+    st.caption(
+        "The sample dataset includes simulated investor behavior profiles with realistic variation and a few noisy observations."
+    )
+
+
+# ------------------------------------------------------------
+# 8. Load the Selected Dataset
+# ------------------------------------------------------------
+
+df = None
+
+# Load the sample dataset when selected.
+if data_source == "Use sample investor dataset":
+    df = load_sample_data()
+    df = clean_dataframe(df)
+
+# Load the uploaded dataset when the user provides a file.
+elif data_source == "Upload my own dataset":
+    if uploaded_file is not None:
+        df = load_uploaded_data(uploaded_file)
+        if df is not None:
+            df = clean_dataframe(df)
+
+
+# ------------------------------------------------------------
+# 9. Main App Header
+# ------------------------------------------------------------
+
 st.title("Investor Persona Clustering App")
 
 st.write(
-    "This app uses unsupervised machine learning to uncover hidden investor "
-    "profiles based on portfolio behavior, trading patterns, diversification, "
-    "and risk exposure. Users can upload their own tabular dataset or explore a "
-    "built-in simulated investor dataset."
+    "This app uses unsupervised machine learning to uncover hidden investor profiles based on portfolio behavior, trading patterns, diversification, and risk exposure."
 )
 
 
-# -----------------------------------------------------------------------------
-# Sidebar controls
-# -----------------------------------------------------------------------------
-st.sidebar.header("Data and Model Settings")
+# ------------------------------------------------------------
+# 10. Overview Page
+# ------------------------------------------------------------
 
-# Let users choose between a built-in sample dataset and their own uploaded file.
-data_source = st.sidebar.radio(
-    "Choose a data source:",
-    ["Use sample investor dataset", "Upload my own dataset"]
-)
+if page == "Overview":
+    st.header("Overview")
 
-if data_source == "Upload my own dataset":
-    uploaded_file = st.sidebar.file_uploader(
-        "Upload a CSV or Excel file",
-        type=["csv", "xlsx", "xls"]
+    st.write(
+        """
+        This project demonstrates unsupervised machine learning by grouping investors
+        into behavior-based segments. Instead of predicting a known label, the app
+        discovers hidden structure in investor data using K-Means clustering,
+        Principal Component Analysis, and hierarchical clustering.
+        """
     )
 
-    if uploaded_file is not None:
-        try:
-            df = load_uploaded_file(uploaded_file)
-        except Exception as e:
-            st.error(f"There was a problem reading the file: {e}")
-            st.stop()
+    if df is None:
+        st.warning("Please select the sample dataset or upload your own dataset.")
     else:
-        st.info("Upload a dataset to begin, or switch to the sample investor dataset.")
-        st.stop()
-else:
-    df = generate_sample_dataset()
+        numeric_cols = get_numeric_columns(df)
+        default_features = get_default_features(df)
 
-# Remove completely empty columns if a user uploads a messy spreadsheet.
-df = df.dropna(axis=1, how="all")
+        # High-level dataset metrics give users quick context.
+        m1, m2, m3, m4 = st.columns(4)
 
-if df.empty:
-    st.error("The selected dataset is empty. Please upload a file with data.")
-    st.stop()
+        with m1:
+            st.metric("Rows", f"{df.shape[0]}")
+        with m2:
+            st.metric("Columns", f"{df.shape[1]}")
+        with m3:
+            st.metric("Numeric Columns", f"{len(numeric_cols)}")
+        with m4:
+            st.metric("Default ML Features", f"{len(default_features)}")
 
+        st.markdown("---")
 
-# -----------------------------------------------------------------------------
-# Dataset preview
-# -----------------------------------------------------------------------------
-st.subheader("1. Dataset Preview")
+        left, right = st.columns(2)
 
-st.write(f"Rows: **{df.shape[0]}** | Columns: **{df.shape[1]}**")
-st.dataframe(df.head(10), use_container_width=True)
+        with left:
+            st.subheader("Dataset Preview")
+            st.dataframe(safe_for_display(df.head(10)), use_container_width=True)
 
-# Provide sample data download when using the built-in dataset.
-if data_source == "Use sample investor dataset":
-    st.download_button(
-        label="Download Sample Dataset",
-        data=df.to_csv(index=False),
-        file_name="investor_persona_dataset.csv",
-        mime="text/csv"
-    )
+        with right:
+            st.subheader("App Capabilities")
+            st.markdown(
+                """
+                - Upload a tabular dataset or use the built-in investor sample dataset.
+                - Select numeric features for unsupervised learning.
+                - Adjust the number of clusters used in K-Means and hierarchical clustering.
+                - Evaluate clustering with silhouette scores and elbow plots.
+                - Visualize patterns using PCA scatterplots and dendrograms.
+                - Download the clustered dataset for further analysis.
+                """
+            )
 
+        st.markdown("---")
 
-# -----------------------------------------------------------------------------
-# Feature selection
-# -----------------------------------------------------------------------------
-st.subheader("2. Select Features for Clustering")
+        st.subheader("Sample Dataset Features")
 
-numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+        # This table helps explain the meaning of the sample dataset fields.
+        feature_info = pd.DataFrame(
+            {
+                "Feature": INVESTOR_FEATURES,
+                "Description": [
+                    "Frequency of trading activity.",
+                    "Average number of days assets are held.",
+                    "Estimated exposure to portfolio volatility.",
+                    "Degree of diversification across holdings.",
+                    "Extent of concentration in a single sector.",
+                    "Number of individual assets in the portfolio.",
+                    "Percentage of portfolio held in cash.",
+                    "Percentage of portfolio invested internationally.",
+                ],
+            }
+        )
 
-# Exclude ID-like columns by default because they do not represent investor behavior.
-default_features = [
-    col for col in numeric_columns
-    if col.lower() not in ["investor_id", "id", "cluster", "kmeans_cluster", "hierarchical_cluster"]
-]
-
-selected_features = st.multiselect(
-    "Choose numeric columns to use for clustering:",
-    options=numeric_columns,
-    default=default_features
-)
-
-if len(selected_features) < 2:
-    st.warning("Please select at least two numeric features for clustering.")
-    st.stop()
-
-# Keep only selected features and remove rows with missing values in those fields.
-model_df = df[selected_features].dropna()
-
-if model_df.shape[0] < 3:
-    st.error("The selected features do not contain enough complete rows for clustering.")
-    st.stop()
-
-st.write(f"Complete rows available for modeling: **{model_df.shape[0]}**")
+        st.dataframe(feature_info, use_container_width=True)
 
 
-# -----------------------------------------------------------------------------
-# Scaling and hyperparameter controls
-# -----------------------------------------------------------------------------
-st.subheader("3. Model Controls")
+# ------------------------------------------------------------
+# 11. Explore Data Page
+# ------------------------------------------------------------
 
-col1, col2, col3 = st.columns(3)
+elif page == "Explore Data":
+    st.header("Explore Data")
 
-with col1:
-    scaler_choice = st.selectbox(
-        "Feature scaling method:",
-        ["StandardScaler", "MinMaxScaler", "No scaling"]
-    )
+    if df is None:
+        st.warning("Please select the sample dataset or upload your own dataset.")
+    else:
+        numeric_cols = get_numeric_columns(df)
 
-with col2:
-    max_clusters = min(10, model_df.shape[0] - 1)
-    n_clusters = st.slider(
-        "Number of clusters:",
-        min_value=2,
-        max_value=max_clusters,
-        value=min(5, max_clusters)
-    )
+        left, right = st.columns(2)
 
-with col3:
-    linkage_method = st.selectbox(
-        "Hierarchical linkage method:",
-        ["ward", "complete", "average", "single"]
-    )
+        with left:
+            st.subheader("Dataset Preview")
+            st.dataframe(safe_for_display(df.head(25)), use_container_width=True)
 
-# Scale selected features so that variables measured on different scales do not dominate the model.
-if scaler_choice == "StandardScaler":
-    scaler = StandardScaler()
-elif scaler_choice == "MinMaxScaler":
-    scaler = MinMaxScaler()
-else:
-    scaler = None
+        with right:
+            st.subheader("Summary Statistics")
+            if numeric_cols:
+                summary_df = df[numeric_cols].describe().transpose().round(3)
+                st.dataframe(safe_for_display(summary_df), use_container_width=True)
+            else:
+                st.info("No numeric columns are available for summary statistics.")
 
-if scaler is not None:
-    X_scaled = scaler.fit_transform(model_df)
-else:
-    X_scaled = model_df.values
+        st.markdown("---")
 
+        # Histogram allows users to understand the shape and spread of one feature.
+        if numeric_cols:
+            st.subheader("Feature Distribution")
 
-# -----------------------------------------------------------------------------
-# K-Means clustering
-# -----------------------------------------------------------------------------
-st.subheader("4. K-Means Clustering Results")
+            graph_col = st.selectbox(
+                "Choose a numeric column to graph",
+                numeric_cols,
+            )
 
-kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-kmeans_labels = kmeans.fit_predict(X_scaled)
+            fig = px.histogram(
+                df,
+                x=graph_col,
+                nbins=20,
+                title=f"Distribution of {graph_col}",
+                template="plotly_white",
+            )
 
-# Silhouette score measures how well-separated the clusters are.
-sil_score = silhouette_score(X_scaled, kmeans_labels)
+            fig.update_layout(
+                height=420,
+                margin=dict(l=20, r=20, t=50, b=20),
+            )
 
-metric_col1, metric_col2 = st.columns(2)
-metric_col1.metric("Selected Number of Clusters", n_clusters)
-metric_col2.metric("Silhouette Score", f"{sil_score:.3f}")
+            st.plotly_chart(fig, use_container_width=True)
 
-st.write(
-    "The silhouette score ranges from -1 to 1. Higher values generally indicate "
-    "that observations are better matched to their assigned cluster and more "
-    "separated from other clusters."
-)
+        st.markdown("---")
 
+        # Correlation analysis helps users detect relationships between features.
+        if len(numeric_cols) >= 2:
+            st.subheader("Correlation Matrix")
 
-# -----------------------------------------------------------------------------
-# PCA visualization
-# -----------------------------------------------------------------------------
-st.subheader("5. PCA Cluster Visualization")
-
-pca = PCA(n_components=2, random_state=42)
-pca_components = pca.fit_transform(X_scaled)
-pca_df = pd.DataFrame({
-    "PC1": pca_components[:, 0],
-    "PC2": pca_components[:, 1],
-    "KMeans Cluster": kmeans_labels.astype(str)
-})
-
-explained_variance = pca.explained_variance_ratio_.sum()
-st.write(
-    f"The first two principal components explain **{explained_variance:.1%}** "
-    "of the variation in the selected features."
-)
-
-fig, ax = plt.subplots(figsize=(8, 5))
-for cluster in sorted(pca_df["KMeans Cluster"].unique()):
-    cluster_points = pca_df[pca_df["KMeans Cluster"] == cluster]
-    ax.scatter(cluster_points["PC1"], cluster_points["PC2"], label=f"Cluster {cluster}", alpha=0.75)
-
-ax.set_xlabel("Principal Component 1")
-ax.set_ylabel("Principal Component 2")
-ax.set_title("Investor Clusters Visualized with PCA")
-ax.legend()
-st.pyplot(fig)
+            fig = create_correlation_heatmap(df, numeric_cols)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("At least two numeric columns are needed for a correlation matrix.")
 
 
-# -----------------------------------------------------------------------------
-# Elbow plot
-# -----------------------------------------------------------------------------
-st.subheader("6. Elbow Plot")
+# ------------------------------------------------------------
+# 12. K-Means Clustering Page
+# ------------------------------------------------------------
 
-inertias = []
-k_values = range(2, max_clusters + 1)
+elif page == "Clustering":
+    st.header("K-Means Clustering")
 
-for k in k_values:
-    temp_kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-    temp_kmeans.fit(X_scaled)
-    inertias.append(temp_kmeans.inertia_)
+    if df is None:
+        st.warning("Please select the sample dataset or upload your own dataset.")
+    else:
+        numeric_cols = get_numeric_columns(df)
+        default_features = get_default_features(df)
 
-fig, ax = plt.subplots(figsize=(8, 5))
-ax.plot(list(k_values), inertias, marker="o")
-ax.set_xlabel("Number of Clusters (k)")
-ax.set_ylabel("Inertia")
-ax.set_title("Elbow Plot for K-Means Clustering")
-st.pyplot(fig)
+        if len(numeric_cols) < 2:
+            st.error("You need at least two numeric columns for clustering.")
+        else:
+            st.write(
+                "Use this section to experiment with K-Means clustering. Select features, adjust the number of clusters, and observe how the results change."
+            )
 
-st.write(
-    "The elbow plot helps users evaluate how the number of clusters affects model "
-    "fit. A useful k value often appears near the point where inertia begins to "
-    "decrease more slowly."
-)
+            # Users choose which numeric variables should define similarity.
+            selected_features = st.multiselect(
+                "Select features for clustering",
+                options=numeric_cols,
+                default=default_features,
+            )
+
+            if len(selected_features) < 2:
+                st.warning("Please select at least two numeric features.")
+            else:
+                c1, c2 = st.columns(2)
+
+                with c1:
+                    # k is the main hyperparameter for K-Means.
+                    k = st.slider(
+                        "Number of clusters (k)",
+                        min_value=2,
+                        max_value=min(10, len(df) - 1),
+                        value=min(5, min(10, len(df) - 1)),
+                    )
+
+                with c2:
+                    # Scaling is recommended because clustering depends on distances.
+                    scale_data = st.checkbox(
+                        "Standardize features",
+                        value=True,
+                        help="Recommended because clustering is distance-based.",
+                    )
+
+                # Prepare the feature matrix and run K-Means.
+                X_raw, X_processed = prepare_model_data(df, selected_features, scale_data)
+                labels, kmeans_model = run_kmeans(X_processed, k)
+                silhouette = calculate_silhouette(X_processed, labels)
+
+                # Add cluster assignments back to the original dataframe.
+                clustered_df = df.copy()
+                clustered_df["kmeans_cluster"] = labels
+
+                st.subheader("Model Feedback")
+
+                # Key metrics summarize the clustering setup and output.
+                m1, m2, m3, m4 = st.columns(4)
+
+                with m1:
+                    st.metric("Selected Features", f"{len(selected_features)}")
+                with m2:
+                    st.metric("Clusters", f"{k}")
+                with m3:
+                    st.metric(
+                        "Silhouette Score",
+                        f"{silhouette:.3f}" if pd.notna(silhouette) else "N/A",
+                    )
+                with m4:
+                    st.metric("Rows Clustered", f"{len(clustered_df)}")
+
+                st.caption(
+                    "Silhouette score ranges from -1 to 1. Higher values usually indicate more distinct clusters."
+                )
+
+                # Tabs organize the major clustering outputs clearly.
+                tab1, tab2, tab3, tab4 = st.tabs(
+                    ["Cluster Summary", "PCA Cluster Plot", "Elbow Plot", "Clustered Dataset"]
+                )
+
+                with tab1:
+                    st.subheader("Cluster Summary")
+
+                    summary = create_cluster_summary(
+                        clustered_df,
+                        selected_features,
+                        labels,
+                        cluster_col="kmeans_cluster",
+                    )
+
+                    st.dataframe(summary, use_container_width=True)
+
+                    st.subheader("Cluster Interpretations")
+
+                    # Translate numeric clusters into plain-English investor profiles.
+                    for _, row in summary.iterrows():
+                        cluster_id = int(row["kmeans_cluster"])
+                        interpretation = describe_cluster(row)
+
+                        st.markdown(
+                            f"""
+                            <div class="insight-card">
+                                <strong>Cluster {cluster_id}</strong><br>
+                                {interpretation}
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                with tab2:
+                    st.subheader("PCA Visualization of K-Means Clusters")
+
+                    # PCA lets users visualize multi-feature clusters in 2D.
+                    pca_df, pca_model = create_pca_dataframe(X_processed, labels)
+                    fig = create_pca_scatter(
+                        pca_df,
+                        "K-Means Clusters Projected with PCA",
+                    )
+
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    variance = pca_model.explained_variance_ratio_
+
+                    v1, v2, v3 = st.columns(3)
+                    with v1:
+                        st.metric("PC1 Explained Variance", f"{variance[0]:.2%}")
+                    with v2:
+                        st.metric("PC2 Explained Variance", f"{variance[1]:.2%}")
+                    with v3:
+                        st.metric("Total Explained", f"{variance.sum():.2%}")
+
+                with tab3:
+                    st.subheader("Elbow Plot")
+
+                    elbow_fig = create_elbow_plot(X_processed, max_k=10)
+
+                    if elbow_fig is not None:
+                        st.plotly_chart(elbow_fig, use_container_width=True)
+                        st.write(
+                            "The elbow plot helps compare different k values. A useful k often appears where inertia begins decreasing more slowly."
+                        )
+                    else:
+                        st.info("Not enough observations to create an elbow plot.")
+
+                with tab4:
+                    st.subheader("Dataset with K-Means Cluster Assignments")
+
+                    st.dataframe(safe_for_display(clustered_df), use_container_width=True)
+
+                    st.download_button(
+                        label="Download clustered dataset",
+                        data=clustered_df.to_csv(index=False).encode("utf-8"),
+                        file_name="investor_persona_kmeans_clusters.csv",
+                        mime="text/csv",
+                    )
 
 
-# -----------------------------------------------------------------------------
-# Hierarchical clustering and dendrogram
-# -----------------------------------------------------------------------------
-st.subheader("7. Hierarchical Clustering Dendrogram")
+# ------------------------------------------------------------
+# 13. PCA Analysis Page
+# ------------------------------------------------------------
 
-# Ward linkage works best with Euclidean distances and is commonly used for compact clusters.
-linked = linkage(X_scaled, method=linkage_method)
+elif page == "PCA Analysis":
+    st.header("Principal Component Analysis")
 
-fig, ax = plt.subplots(figsize=(10, 5))
-dendrogram(linked, ax=ax, truncate_mode="lastp", p=20)
-ax.set_title("Hierarchical Clustering Dendrogram")
-ax.set_xlabel("Investors or Clustered Groups")
-ax.set_ylabel("Distance")
-st.pyplot(fig)
+    if df is None:
+        st.warning("Please select the sample dataset or upload your own dataset.")
+    else:
+        numeric_cols = get_numeric_columns(df)
+        default_features = get_default_features(df)
 
-hierarchical_model = AgglomerativeClustering(n_clusters=n_clusters, linkage=linkage_method)
-hierarchical_labels = hierarchical_model.fit_predict(X_scaled)
+        if len(numeric_cols) < 2:
+            st.error("You need at least two numeric columns for PCA.")
+        else:
+            st.write(
+                "PCA reduces multiple numeric features into two main components, making it easier to visualize hidden structure in the dataset."
+            )
+
+            selected_features = st.multiselect(
+                "Select features for PCA",
+                options=numeric_cols,
+                default=default_features,
+            )
+
+            if len(selected_features) < 2:
+                st.warning("Please select at least two numeric features.")
+            else:
+                scale_data = st.checkbox(
+                    "Standardize features before PCA",
+                    value=True,
+                    help="Recommended when features use different units.",
+                )
+
+                # Prepare data before PCA. Standardization is especially important
+                # because PCA is influenced by the scale of each variable.
+                X_raw, X_processed = prepare_model_data(df, selected_features, scale_data)
+                pca_df, pca_model = create_pca_dataframe(X_processed)
+
+                st.subheader("PCA Scatter Plot")
+
+                fig = create_pca_scatter(
+                    pca_df,
+                    "Two-Dimensional PCA Projection",
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+                variance = pca_model.explained_variance_ratio_
+
+                st.subheader("Explained Variance")
+
+                m1, m2, m3 = st.columns(3)
+                with m1:
+                    st.metric("PC1", f"{variance[0]:.2%}")
+                with m2:
+                    st.metric("PC2", f"{variance[1]:.2%}")
+                with m3:
+                    st.metric("Total Explained", f"{variance.sum():.2%}")
+
+                st.subheader("PCA Feature Loadings")
+
+                # Loadings show how much each original feature contributes to
+                # PC1 and PC2, making PCA easier to interpret.
+                loadings = pd.DataFrame(
+                    pca_model.components_.T,
+                    columns=["PC1 Loading", "PC2 Loading"],
+                    index=selected_features,
+                ).round(3)
+
+                st.dataframe(loadings, use_container_width=True)
+
+                st.caption(
+                    "Feature loadings show how strongly each original variable contributes to each principal component."
+                )
 
 
-# -----------------------------------------------------------------------------
-# Cluster interpretation and summary
-# -----------------------------------------------------------------------------
-st.subheader("8. Investor Persona Insights")
+# ------------------------------------------------------------
+# 14. Hierarchical Clustering Page
+# ------------------------------------------------------------
 
-# Reattach labels to the original complete rows used for modeling.
-results_df = df.loc[model_df.index].copy()
-results_df["kmeans_cluster"] = kmeans_labels
-results_df["hierarchical_cluster"] = hierarchical_labels
-results_df["PC1"] = pca_components[:, 0]
-results_df["PC2"] = pca_components[:, 1]
+elif page == "Hierarchical Analysis":
+    st.header("Hierarchical Clustering")
 
-# Summarize clusters by the average selected feature values.
-cluster_summary = results_df.groupby("kmeans_cluster")[selected_features].mean().round(3)
-cluster_summary["suggested_persona"] = cluster_summary.apply(assign_persona_name, axis=1)
-cluster_summary["investor_count"] = results_df.groupby("kmeans_cluster").size()
+    if df is None:
+        st.warning("Please select the sample dataset or upload your own dataset.")
+    else:
+        numeric_cols = get_numeric_columns(df)
+        default_features = get_default_features(df)
 
-st.write("Cluster labels are assigned by the algorithm and do not imply ranking or order.")
-st.dataframe(cluster_summary, use_container_width=True)
+        if len(numeric_cols) < 2:
+            st.error("You need at least two numeric columns for hierarchical clustering.")
+        else:
+            st.write(
+                "Hierarchical clustering shows how observations relate to each other through a tree-like structure called a dendrogram."
+            )
 
-st.write("Dataset with assigned cluster labels:")
-st.dataframe(results_df, use_container_width=True)
+            selected_features = st.multiselect(
+                "Select features for hierarchical clustering",
+                options=numeric_cols,
+                default=default_features,
+            )
 
-# Download clustered results
-st.subheader("9. Download Results")
+            if len(selected_features) < 2:
+                st.warning("Please select at least two numeric features.")
+            else:
+                c1, c2 = st.columns(2)
 
-csv_buffer = io.StringIO()
-results_df.to_csv(csv_buffer, index=False)
+                with c1:
+                    # Number of clusters controls where the hierarchy is cut.
+                    num_clusters = st.slider(
+                        "Number of clusters",
+                        min_value=2,
+                        max_value=min(10, len(df) - 1),
+                        value=min(5, min(10, len(df) - 1)),
+                    )
 
-st.download_button(
-    label="Download Clustered Dataset",
-    data=csv_buffer.getvalue(),
-    file_name="investor_persona_clustered_results.csv",
-    mime="text/csv"
-)
+                with c2:
+                    scale_data = st.checkbox(
+                        "Standardize features",
+                        value=True,
+                        help="Recommended because hierarchical clustering is distance-based.",
+                    )
 
-# Footer explanation
-st.caption(
-    "Built with Streamlit, pandas, scikit-learn, scipy, and matplotlib. "
-    "This project demonstrates unsupervised machine learning through clustering, "
-    "dimensionality reduction, model evaluation, and interactive data exploration."
-)
+                X_raw, X_processed = prepare_model_data(df, selected_features, scale_data)
+
+                # Agglomerative clustering builds clusters from the bottom up,
+                # repeatedly merging similar observations or groups.
+                hierarchical_model = AgglomerativeClustering(
+                    n_clusters=num_clusters,
+                    linkage="ward",
+                )
+
+                labels = hierarchical_model.fit_predict(X_processed)
+                silhouette = calculate_silhouette(X_processed, labels)
+
+                clustered_df = df.copy()
+                clustered_df["hierarchical_cluster"] = labels
+
+                m1, m2, m3 = st.columns(3)
+
+                with m1:
+                    st.metric("Clusters", f"{num_clusters}")
+                with m2:
+                    st.metric("Selected Features", f"{len(selected_features)}")
+                with m3:
+                    st.metric(
+                        "Silhouette Score",
+                        f"{silhouette:.3f}" if pd.notna(silhouette) else "N/A",
+                    )
+
+                st.subheader("Dendrogram")
+
+                # If investor IDs are available, use them as dendrogram labels
+                # to make the tree easier to interpret.
+                dendrogram_labels = None
+                if "investor_id" in df.columns:
+                    dendrogram_labels = df["investor_id"].astype(str).tolist()
+
+                fig = create_dendrogram(X_processed, labels=dendrogram_labels)
+                st.pyplot(fig)
+
+                st.subheader("Hierarchical Cluster Summary")
+
+                summary = create_cluster_summary(
+                    clustered_df,
+                    selected_features,
+                    labels,
+                    cluster_col="hierarchical_cluster",
+                )
+
+                st.dataframe(summary, use_container_width=True)
+
+                st.subheader("PCA View of Hierarchical Clusters")
+
+                # This PCA plot provides a second visual check of the
+                # hierarchical clustering output.
+                pca_df, pca_model = create_pca_dataframe(X_processed, labels)
+                pca_fig = create_pca_scatter(
+                    pca_df,
+                    "Hierarchical Clusters Projected with PCA",
+                )
+
+                st.plotly_chart(pca_fig, use_container_width=True)
+
+                st.download_button(
+                    label="Download hierarchical clustered dataset",
+                    data=clustered_df.to_csv(index=False).encode("utf-8"),
+                    file_name="investor_persona_hierarchical_clusters.csv",
+                    mime="text/csv",
+                )
