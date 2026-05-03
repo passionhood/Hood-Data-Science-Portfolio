@@ -15,35 +15,35 @@ Users can upload their own dataset or explore a built-in simulated investor data
 ### Overview Dashboard
 ![Overview Screenshot](images/overview.png)
 
-This view provides a high-level summary of the dataset, including the number of rows, columns, and numeric features. It also displays a preview of the data and outlines the app’s capabilities, giving users an immediate understanding of the dataset structure and available analysis tools.
+This view provides a high-level summary of the dataset, including the total number of rows, columns, numeric features, and default modeling features. It also displays a preview of the investor dataset alongside a summary of app capabilities, helping users quickly understand both the data structure and available analysis tools.
 
 ---
 
 ### Data Exploration
 ![Explore Data Screenshot](images/explore.png)
 
-The data exploration page allows users to analyze distributions of individual features and examine relationships between variables through a correlation matrix. This step is critical for understanding patterns before applying clustering models.
+The data exploration page visualizes the distribution of selected features using histograms. In this example, volatility exposure shows clear variation across investors, helping users identify patterns, skewness, and potential groupings before applying clustering models.
 
 ---
 
 ### K-Means Clustering Results
 ![Clustering Screenshot](images/clustering.png)
 
-This section shows the results of K-Means clustering, including cluster summaries, silhouette score, and feature averages for each group. It also provides plain-English interpretations of clusters, helping translate model output into meaningful investor personas.
+This visualization displays K-Means clustering results projected into two dimensions using PCA. Each point represents an investor, and color-coded clusters reveal distinct behavioral groupings. The separation between clusters demonstrates how effectively the model differentiates investor personas based on portfolio characteristics.
 
 ---
 
 ### PCA Visualization
 ![PCA Screenshot](images/pca.png)
 
-Principal Component Analysis (PCA) reduces the dataset into two dimensions, allowing clusters to be visualized in a 2D space. Points that are closer together represent investors with more similar portfolio behavior.
+This PCA scatter plot shows the two-dimensional projection of the dataset after dimensionality reduction. The axes (PC1 and PC2) capture the majority of variance in the data, allowing complex investor behavior patterns to be visualized in a simplified space where similar investors appear closer together.
 
 ---
 
 ### Hierarchical Clustering (Dendrogram)
 ![Hierarchical Screenshot](images/hierarchical.png)
 
-The dendrogram visualizes how investors are grouped step-by-step in hierarchical clustering. It reveals the relationships between clusters and helps users understand how different investor profiles merge at different similarity levels.
+The dendrogram illustrates how investors are grouped through hierarchical clustering. Each branch represents a merge between clusters, with height indicating distance (dissimilarity). This view reveals the nested structure of investor relationships and how clusters form at different similarity thresholds.
 
 ---
 
