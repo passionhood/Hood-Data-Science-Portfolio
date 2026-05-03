@@ -1,97 +1,142 @@
 # Hood-Data-Science-Portfolio
 
-This repository showcases my work in data science, with a focus on data cleaning, transformation, analysis, and visualization. It contains projects completed as part of my Introduction to Data Science course and will continue to be updated to reflect my growth in working with real-world data, developing analytical workflows, and communicating insights effectively.
+This repository showcases my work in data science, with a focus on data cleaning, exploratory analysis, machine learning, and interactive application development. It contains projects completed as part of my Introduction to Data Science coursework and continues to evolve as I build more advanced, real-world analytical tools.
 
-The projects in this repository highlight core data science skills, including structuring messy datasets, performing exploratory data analysis (EDA), and creating visualizations to support data-driven decision-making. Each project is organized in its own folder and includes code, data, and documentation explaining the purpose and outcomes of the work.
+Across these projects, I demonstrate core data science skills including:
+- Structuring and cleaning messy datasets  
+- Performing exploratory data analysis (EDA)  
+- Building and evaluating machine learning models  
+- Developing interactive web applications  
+- Communicating insights through visualization and design  
+
+Each project is organized in its own folder and includes code, data, and documentation explaining the purpose, methodology, and results.
+
+---
 
 # Projects
 
-## ML Investment Risk Analyzer - Streamlit Web App
+## Investor Persona Clustering App – Unsupervised ML (Streamlit Web App)
+Link: https://github.com/passionhood/Hood-Data-Science-Portfolio/tree/main/MLUnsupervisedApp
+
+This interactive machine learning web application uses **unsupervised learning** to uncover hidden investor behavior profiles based on portfolio characteristics and trading patterns.
+
+Unlike traditional predictive models, this app focuses on **discovering structure within data** by grouping investors into behavior-based segments. Users can upload custom datasets or use a built-in simulated dataset, adjust model parameters, and visually explore how investor personas emerge.
+
+Key components of the project include:
+- K-Means clustering with adjustable number of clusters (k)
+- Hierarchical clustering with dendrogram visualization
+- Principal Component Analysis (PCA) for dimensionality reduction and visualization
+- Model evaluation tools (silhouette score, elbow method)
+- Feature selection and optional standardization
+- Interactive Streamlit interface with multi-page navigation
+- Downloadable clustered datasets for further analysis
+
+This project demonstrates my ability to apply unsupervised machine learning techniques, build interactive analytical tools, and translate complex model outputs into meaningful insights.
+
+---
+
+## ML Investment Risk Analyzer – Supervised ML (Streamlit Web App)
 Link: https://github.com/passionhood/Hood-Data-Science-Portfolio/tree/main/MLStreamlitApp
 
-This advanced interactive machine learning web application enables users to analyze 30 years of financial market data and predict investment risk. Users can upload custom datasets or use the provided historical market dataset, select from three supervised machine learning models (Logistic Regression, Decision Tree, K-Nearest Neighbors), and make real-time predictions.
+This advanced interactive machine learning web application enables users to analyze 30 years of financial market data and predict investment risk using supervised learning models.
+
+Users can upload custom datasets or use the provided historical market dataset, select from multiple models (Logistic Regression, Decision Tree, K-Nearest Neighbors), and generate real-time predictions.
 
 Key components of the project include:
 - Interactive dashboard with 11+ financial assets (indices, stocks, commodities)
 - Exploratory data analysis tools (correlation matrix, summary statistics, time-series visualization)
 - Multiple machine learning models with hyperparameter tuning
-- Comprehensive model evaluation (accuracy, precision, recall, F1, ROC-AUC, confusion matrix)
+- Comprehensive model evaluation (accuracy, precision, recall, F1, ROC-AUC)
 - Feature engineering (returns, rolling volatility, risk classification)
-- Production-ready Streamlit web interface with multi-page navigation
-- Complete documentation with screenshots and user guides
+- Production-ready Streamlit interface with multi-page navigation
 
-This project demonstrates full-stack machine learning development, from data preprocessing to cloud deployment, with an intuitive interface that communicates results clearly. It showcases my proficiency with Streamlit, scikit-learn, Pandas, Plotly, and building end-to-end data applications.
+This project demonstrates end-to-end supervised machine learning development, from data preprocessing to deployment, with a strong emphasis on interpretability and user interaction.
+
+---
 
 ## Tidy Data Project: Federal R&D Budget Analysis  
 Link: https://github.com/passionhood/Hood-Data-Science-Portfolio/tree/main/TidyData-Project 
 
-This project applies tidy data principles to clean and restructure a Federal Research & Development (R&D) budget dataset. The original dataset was transformed from a wide format into a tidy structure to improve usability for analysis and visualization.
+This project applies tidy data principles to clean and restructure a Federal Research & Development (R&D) budget dataset.
 
 Key components of the project include:
 - Data cleaning and transformation using Pandas  
 - Reshaping data using melt() and string operations  
-- Creating a pivot table to analyze budget trends across departments and years  
-- Visualizing data using Matplotlib and Seaborn  
+- Creating pivot tables to analyze trends across departments and years  
+- Data visualization using Matplotlib and Seaborn  
 
-This project demonstrates my ability to take unstructured data and convert it into a format suitable for analysis, which is a critical skill in both data science and finance. It builds a strong foundation for more advanced analytical work by emphasizing the importance of clean, well-structured data.
+This project demonstrates my ability to transform unstructured data into a usable format for analysis, a foundational skill in data science.
 
+---
 
 ## Basic Streamlit App
 Link: https://github.com/passionhood/Hood-Data-Science-Portfolio/tree/main/basic_streamlit_app
 
-A foundational Streamlit application showcasing the basics of building interactive web applications for data science. This project includes core Streamlit functionality and best practices for creating user-friendly data interfaces.
+A foundational Streamlit application demonstrating core concepts in building interactive data applications.
 
 Key components of the project include:
 - Interactive UI elements (sliders, dropdowns, file uploads)
-- Data visualization and real-time updates
+- Real-time data updates and visualization
 - Session state management
-- Clean code, organization, and documentation
+- Clean and modular code structure
 
-This project demonstrates my ability to build interactive applications that make data analysis accessible to non-technical users.
+This project highlights my ability to design user-friendly data interfaces.
 
+---
 
-## Linear Regressions Analysis
+## Linear Regression Analysis
 Link: https://github.com/passionhood/Hood-Data-Science-Portfolio/tree/main/linear_regressions
 
-A comprehensive analysis of linear regression models and applications. This Jupyter notebook project (IDS_Week_7_FINAL.ipynb) explores regression techniques, model evaluation, and predictive analysis.
+A Jupyter notebook project exploring linear regression models and predictive analysis.
 
 Key components of the project include:
-- Linear regression model development and evaluation
+- Regression model development and evaluation
 - Feature selection and relationship analysis
 - Model diagnostics and assumptions testing
-- Predictive analysis and interpretation of coefficients
 - Visualization of regression results
 
-This project demonstrates my understanding of regression methodology and its applications in predictive modeling.
+This project demonstrates my understanding of regression methodology and statistical modeling.
+
+---
 
 ## Homework Assignment: Introduction to Data Science (Week 6)
 Link: https://github.com/passionhood/Hood-Data-Science-Portfolio/blob/main/HOOD_IDS_Hwk6.ipynb
 
-A graded homework assignment from the Introduction to Data Science course demonstrating proficiency in data analysis, manipulation, and visualization techniques learned throughout the course.
+A graded assignment demonstrating foundational skills in data analysis, transformation, and visualization.
 
 Key concepts covered:
 - Data loading and exploration
-- Statistical analysis and summary statistics
-- Data visualization and exploratory data analysis
-- Data transformation and feature engineering
+- Statistical analysis
+- Data visualization
+- Feature engineering
 
+---
 
-# Organization Plan
+# Portfolio Narrative
+
+Together, these projects reflect my progression from foundational data analysis to advanced machine learning and application development.
+
+- The **Investment Risk Analyzer** demonstrates supervised learning and predictive modeling  
+- The **Investor Persona Clustering App** extends this work into unsupervised learning and pattern discovery  
+- Earlier projects establish strong foundations in data cleaning, transformation, and statistical analysis  
+
+This combination highlights my ability to work across the full data science pipeline—from raw data to deployed applications.
+
+---
+
+# Organization
 
 Each project in this repository includes:
-- Source code (Python scripts and/or Jupyter Notebooks)
-- Dataset(s) where applicable
-- Visualizations (charts, graphs, and tables)  
-- Project-specific README with detailed methodology and results  
+- Source code (Python scripts and/or Jupyter notebooks)  
+- Dataset(s) where applicable  
+- Visualizations (charts, graphs, tables)  
+- A project-specific README explaining methodology and results  
 
-This portfolio reflects my progression in data science and will continue to expand to include more advanced projects, particularly those at the intersection of finance, machine learning, and practical data applications.
+---
 
-# Organization Plan
+# Future Development
 
-Each project in this repository includes:
-- Source code  
-- Dataset(s)  
-- Visualizations (charts, graphs, and tables)  
-- A project-specific README describing methodology and results  
-
-This portfolio reflects my progression in data science and will continue to expand to include more advanced projects, particularly those at the intersection of finance and data analysis.
+This portfolio will continue to expand with projects at the intersection of:
+- Finance and data science  
+- Machine learning and real-world applications  
+- Interactive analytics and decision-support tools  
