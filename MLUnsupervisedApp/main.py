@@ -391,14 +391,26 @@ def prepare_model_data(df: pd.DataFrame, selected_features: list, scale_data: bo
     return X_raw, X_processed
 
 
-def run_kmeans(X_processed, k: int):
+def run_kmeans(X_processed, k: int, init_method: str = "k-means++"):
     """
     Fit a K-Means clustering model.
 
     K-Means groups observations by minimizing the distance between each
     observation and its assigned cluster center.
+
+    Parameters:
+        X_processed: Prepared numeric feature matrix.
+        k (int): Number of clusters selected by the user.
+        init_method (str): Centroid initialization strategy. Users can compare
+                           "k-means++" and "random" to see how initialization
+                           can affect clustering results.
     """
-    model = KMeans(n_clusters=k, random_state=42, n_init=10)
+    model = KMeans(
+        n_clusters=k,
+        init=init_method,
+        random_state=42,
+        n_init=10,
+    )
     labels = model.fit_predict(X_processed)
     return labels, model
 
@@ -418,6 +430,40 @@ def calculate_silhouette(X_processed, labels):
         return np.nan
 
     return silhouette_score(X_processed, labels)
+
+
+def display_silhouette_interpretation(score):
+    """
+    Display a plain-English interpretation of the silhouette score.
+
+    This helps users understand whether the clustering output appears strong,
+    moderate, or weak instead of only seeing a numeric metric.
+    """
+    if pd.isna(score):
+        st.info("Silhouette score is not available for the current clustering setup.")
+    elif score >= 0.50:
+        st.success("Strong clustering structure detected. The clusters appear well separated.")
+    elif score >= 0.25:
+        st.info("Moderate clustering structure detected. Some clusters may overlap, but meaningful grouping is still present.")
+    else:
+        st.warning("Weak clustering structure detected. The selected features or number of clusters may not separate the data clearly.")
+
+
+def display_silhouette_interpretation(score):
+    """
+    Display a plain-English interpretation of the silhouette score.
+
+    This helps users understand whether the clustering output appears strong,
+    moderate, or weak instead of only seeing a numeric metric.
+    """
+    if pd.isna(score):
+        st.info("Silhouette score is not available for the current clustering setup.")
+    elif score >= 0.50:
+        st.success("Strong clustering structure detected. The clusters appear well separated.")
+    elif score >= 0.25:
+        st.info("Moderate clustering structure detected. Some clusters may overlap, but meaningful grouping is still present.")
+    else:
+        st.warning("Weak clustering structure detected. The selected features or number of clusters may not separate the data clearly.")
 
 
 def create_elbow_plot(X_processed, max_k: int = 10):
@@ -738,6 +784,19 @@ if page == "Overview":
         """
     )
 
+    with st.expander("Why use unsupervised learning for investor behavior?"):
+        st.write(
+            """
+            Unsupervised learning is useful when there is no predefined target label.
+            Instead of telling the model what type of investor each row represents,
+            the app asks the model to discover natural groupings based on behavior.
+
+            This approach is helpful for investor segmentation because investors may
+            share similar patterns in turnover, holding period, diversification, and
+            risk exposure even if those groups are not labeled in advance.
+            """
+        )
+
     if df is None:
         st.warning("Please select the sample dataset or upload your own dataset.")
     else:
@@ -853,6 +912,19 @@ elif page == "Explore Data":
 
             st.plotly_chart(fig, use_container_width=True)
 
+            with st.expander("How should I interpret this feature distribution?"):
+                st.write(
+                    """
+                    The histogram shows how values for the selected feature are spread
+                    across investors. Peaks may suggest common behavior patterns, while
+                    gaps or separate groups may suggest that investors naturally fall
+                    into different segments.
+
+                    This view is useful before clustering because it helps users understand
+                    whether a feature has enough variation to help separate investor profiles.
+                    """
+                )
+
         st.markdown("---")
 
         # Correlation analysis helps users detect relationships between features.
@@ -861,6 +933,20 @@ elif page == "Explore Data":
 
             fig = create_correlation_heatmap(df, numeric_cols)
             st.plotly_chart(fig, use_container_width=True)
+
+            with st.expander("Why look at correlations before clustering?"):
+                st.write(
+                    """
+                    The correlation matrix shows relationships between numeric features.
+                    Strong positive or negative correlations can reveal features that move
+                    together or capture similar information.
+
+                    This matters because clustering is affected by the features selected.
+                    If several features are highly related, they may give extra weight to
+                    the same underlying behavior. Reviewing correlations helps users make
+                    more thoughtful feature choices.
+                    """
+                )
         else:
             st.info("At least two numeric columns are needed for a correlation matrix.")
 
@@ -882,8 +968,25 @@ elif page == "Clustering":
             st.error("You need at least two numeric columns for clustering.")
         else:
             st.write(
-                "Use this section to experiment with K-Means clustering. Select features, adjust the number of clusters, and observe how the results change."
+                "Use this section to experiment with K-Means clustering. Select features, adjust the number of clusters, compare initialization methods, and observe how the results change."
             )
+
+            st.info(
+                "K-Means is a distance-based clustering method. Changing the selected features, standardization setting, initialization method, or k value can change the final investor groupings."
+            )
+
+            with st.expander("Why use K-Means for this app?"):
+                st.write(
+                    """
+                    K-Means is useful for quickly grouping investors into a chosen number
+                    of segments. It works well when the goal is to create clear, interpretable
+                    groups based on numeric behavior patterns.
+
+                    In this app, K-Means helps translate portfolio behavior into potential
+                    investor personas, such as active traders, passive long-term investors,
+                    or conservative wealth preservers.
+                    """
+                )
 
             # Users choose which numeric variables should define similarity.
             selected_features = st.multiselect(
@@ -895,7 +998,7 @@ elif page == "Clustering":
             if len(selected_features) < 2:
                 st.warning("Please select at least two numeric features.")
             else:
-                c1, c2 = st.columns(2)
+                c1, c2, c3 = st.columns(3)
 
                 with c1:
                     # k is the main hyperparameter for K-Means.
@@ -904,9 +1007,18 @@ elif page == "Clustering":
                         min_value=2,
                         max_value=min(10, len(df) - 1),
                         value=min(5, min(10, len(df) - 1)),
+                        help="Controls how many investor groups the model should create.",
                     )
 
                 with c2:
+                    # Initialization affects where K-Means begins placing centroids.
+                    init_method = st.selectbox(
+                        "Initialization Method",
+                        ["k-means++", "random"],
+                        help="k-means++ usually creates more stable starting points, while random initialization allows users to test sensitivity.",
+                    )
+
+                with c3:
                     # Scaling is recommended because clustering depends on distances.
                     scale_data = st.checkbox(
                         "Standardize features",
@@ -916,7 +1028,7 @@ elif page == "Clustering":
 
                 # Prepare the feature matrix and run K-Means.
                 X_raw, X_processed = prepare_model_data(df, selected_features, scale_data)
-                labels, kmeans_model = run_kmeans(X_processed, k)
+                labels, kmeans_model = run_kmeans(X_processed, k, init_method)
                 silhouette = calculate_silhouette(X_processed, labels)
 
                 # Add cluster assignments back to the original dataframe.
@@ -926,23 +1038,58 @@ elif page == "Clustering":
                 st.subheader("Model Feedback")
 
                 # Key metrics summarize the clustering setup and output.
-                m1, m2, m3, m4 = st.columns(4)
+                m1, m2, m3, m4, m5 = st.columns(5)
 
                 with m1:
                     st.metric("Selected Features", f"{len(selected_features)}")
                 with m2:
                     st.metric("Clusters", f"{k}")
                 with m3:
+                    st.metric("Init Method", init_method)
+                with m4:
                     st.metric(
                         "Silhouette Score",
                         f"{silhouette:.3f}" if pd.notna(silhouette) else "N/A",
                     )
-                with m4:
+                with m5:
                     st.metric("Rows Clustered", f"{len(clustered_df)}")
 
                 st.caption(
                     "Silhouette score ranges from -1 to 1. Higher values usually indicate more distinct clusters."
                 )
+
+                # Provide interpretation so users understand the metric in context.
+                display_silhouette_interpretation(silhouette)
+
+                with st.expander("What does the silhouette score mean?"):
+                    st.write(
+                        """
+                        The silhouette score measures how well each investor fits within
+                        its assigned cluster compared with other clusters. Scores closer
+                        to 1 suggest that clusters are clearly separated. Scores near 0
+                        suggest overlap between groups, while negative scores may indicate
+                        that some observations may fit better in another cluster.
+
+                        This metric is useful for unsupervised learning because there is
+                        no true target label to compare predictions against.
+                        """
+                    )
+
+                with st.expander("Why choose these K-Means settings?"):
+                    st.write(
+                        """
+                        The number of clusters, initialization method, feature selection,
+                        and scaling option all affect the clustering results.
+
+                        - Number of clusters (k): controls how many investor groups are created.
+                        - Initialization method: controls how starting cluster centers are chosen.
+                        - Feature selection: determines which investor behaviors define similarity.
+                        - Standardization: makes features comparable when they use different units.
+
+                        These controls are included so users can experiment and see how modeling
+                        choices change the final investor segments.
+                        """
+                    )
 
                 # Tabs organize the major clustering outputs clearly.
                 tab1, tab2, tab3, tab4 = st.tabs(
@@ -960,6 +1107,20 @@ elif page == "Clustering":
                     )
 
                     st.dataframe(summary, use_container_width=True)
+
+                    with st.expander("How should I read the cluster summary table?"):
+                        st.write(
+                            """
+                            The cluster summary table shows the average value of each selected
+                            feature within each cluster. This makes it easier to understand
+                            what separates one investor group from another.
+
+                            For example, a cluster with high portfolio turnover and short
+                            holding periods may represent active traders, while a cluster with
+                            low turnover and high diversification may represent passive long-term
+                            investors.
+                            """
+                        )
 
                     st.subheader("Cluster Interpretations")
 
@@ -1010,6 +1171,23 @@ elif page == "Clustering":
                         st.write(
                             "The elbow plot helps compare different k values. A useful k often appears where inertia begins decreasing more slowly."
                         )
+                        st.caption(
+                            "If the curve has a clear bend, that point may be a reasonable balance between compact clusters and interpretability."
+                        )
+
+                        with st.expander("How should I choose the number of clusters?"):
+                            st.write(
+                                """
+                                The elbow plot shows how inertia changes as the number
+                                of clusters increases. Inertia measures how tightly points
+                                fit within their assigned clusters.
+
+                                A good k is often near the point where the curve begins
+                                to flatten. That means adding more clusters only slightly
+                                improves compactness, so the simpler solution may be easier
+                                to interpret.
+                                """
+                            )
                     else:
                         st.info("Not enough observations to create an elbow plot.")
 
@@ -1103,6 +1281,23 @@ elif page == "PCA Analysis":
                     "Feature loadings show how strongly each original variable contributes to each principal component."
                 )
 
+                st.info(
+                    "A higher total explained variance means the two-dimensional PCA plot preserves more information from the original selected features."
+                )
+
+                with st.expander("What do PCA feature loadings mean?"):
+                    st.write(
+                        """
+                        Feature loadings show how strongly each original feature contributes
+                        to PC1 and PC2. Larger absolute values mean the feature has a stronger
+                        influence on that component.
+
+                        This helps explain which investor behaviors are driving the PCA
+                        visualization. For example, if volatility exposure has a large loading
+                        on PC1, then PC1 may be strongly related to risk exposure.
+                        """
+                    )
+
 
 # ------------------------------------------------------------
 # 14. Hierarchical Clustering Page
@@ -1123,6 +1318,20 @@ elif page == "Hierarchical Analysis":
             st.write(
                 "Hierarchical clustering shows how observations relate to each other through a tree-like structure called a dendrogram."
             )
+
+            with st.expander("Why use hierarchical clustering in addition to K-Means?"):
+                st.write(
+                    """
+                    K-Means requires the user to choose a number of clusters before the
+                    model runs. Hierarchical clustering shows how observations group together
+                    step by step, which can help users understand the structure of the data
+                    before deciding how many clusters make sense.
+
+                    Using both methods provides a richer view of investor behavior because
+                    K-Means gives clear segment assignments, while the dendrogram reveals
+                    relationships between observations.
+                    """
+                )
 
             selected_features = st.multiselect(
                 "Select features for hierarchical clustering",
@@ -1178,6 +1387,21 @@ elif page == "Hierarchical Analysis":
                         f"{silhouette:.3f}" if pd.notna(silhouette) else "N/A",
                     )
 
+                # Provide interpretation for hierarchical clustering quality.
+                display_silhouette_interpretation(silhouette)
+
+                with st.expander("What does the hierarchical silhouette score mean?"):
+                    st.write(
+                        """
+                        The silhouette score is interpreted the same way for hierarchical
+                        clustering as it is for K-Means. It measures whether investors are
+                        closer to their assigned cluster than to other clusters.
+
+                        This gives a metric-based way to compare whether the hierarchical
+                        clustering solution appears strong, moderate, or weak.
+                        """
+                    )
+
                 st.subheader("Dendrogram")
 
                 # If investor IDs are available, use them as dendrogram labels
@@ -1188,6 +1412,19 @@ elif page == "Hierarchical Analysis":
 
                 fig = create_dendrogram(X_processed, labels=dendrogram_labels)
                 st.pyplot(fig)
+
+                with st.expander("How should I interpret the dendrogram?"):
+                    st.write(
+                        """
+                        The dendrogram shows how investors are merged into groups based
+                        on similarity. Investors that merge lower on the chart are more
+                        similar to each other. Merges that happen higher on the chart
+                        represent larger differences between groups.
+
+                        This visualization is useful because it shows the nested structure
+                        of the data rather than only showing final cluster labels.
+                        """
+                    )
 
                 st.subheader("Hierarchical Cluster Summary")
 
@@ -1211,6 +1448,20 @@ elif page == "Hierarchical Analysis":
                 )
 
                 st.plotly_chart(pca_fig, use_container_width=True)
+
+                with st.expander("Why view hierarchical clusters with PCA?"):
+                    st.write(
+                        """
+                        The dendrogram shows the tree structure of the clusters, while the
+                        PCA plot shows those same cluster assignments in a two-dimensional
+                        space. This makes it easier to compare whether the hierarchical
+                        clusters also appear visually separated.
+
+                        If groups are separated in the PCA plot, that supports the idea
+                        that the selected features are capturing meaningful behavioral
+                        differences between investors.
+                        """
+                    )
 
                 st.download_button(
                     label="Download hierarchical clustered dataset",
