@@ -612,6 +612,40 @@ def describe_cluster(row: pd.Series) -> str:
     return "Balanced or Mixed Investor: moderate behavior across several portfolio characteristics."
 
 
+def name_cluster(row: pd.Series) -> str:
+    """
+    Assign a short, user-friendly investor persona name to each cluster.
+
+    This function uses the average feature values from each cluster summary
+    table to translate numeric model output into language that is easier for
+    non-technical users to understand.
+    """
+    turnover = row.get("portfolio_turnover", np.nan)
+    holding = row.get("avg_holding_period_days", np.nan)
+    volatility = row.get("volatility_exposure", np.nan)
+    diversification = row.get("diversification_score", np.nan)
+    sector = row.get("sector_concentration", np.nan)
+    cash = row.get("cash_allocation_pct", np.nan)
+
+    if pd.notna(turnover) and pd.notna(volatility) and pd.notna(holding):
+        if turnover >= 0.65 and volatility >= 0.70 and holding <= 120:
+            return "Aggressive Traders"
+
+    if pd.notna(turnover) and pd.notna(diversification) and pd.notna(holding):
+        if turnover <= 0.25 and diversification >= 0.70 and holding >= 250:
+            return "Passive Long-Term Investors"
+
+    if pd.notna(sector) and pd.notna(volatility):
+        if sector >= 0.75 and volatility >= 0.70:
+            return "Concentrated Growth Investors"
+
+    if pd.notna(cash) and pd.notna(volatility):
+        if cash >= 0.25 and volatility <= 0.35:
+            return "Conservative Wealth Preservers"
+
+    return "Balanced / Mixed Investors"
+
+
 def create_correlation_heatmap(df: pd.DataFrame, numeric_cols: list):
     """
     Create a correlation matrix heatmap.
@@ -1122,17 +1156,22 @@ elif page == "Clustering":
                             """
                         )
 
-                    st.subheader("Cluster Interpretations")
+                    st.subheader("Investor Personas Identified by the Model")
+
+                    st.write(
+                        "Based on the selected features and clustering settings, the model identified the following investor profiles:"
+                    )
 
                     # Translate numeric clusters into plain-English investor profiles.
                     for _, row in summary.iterrows():
                         cluster_id = int(row["kmeans_cluster"])
+                        cluster_name = name_cluster(row)
                         interpretation = describe_cluster(row)
 
                         st.markdown(
                             f"""
                             <div class="insight-card">
-                                <strong>Cluster {cluster_id}</strong><br>
+                                <strong>Cluster {cluster_id}: {cluster_name}</strong><br>
                                 {interpretation}
                             </div>
                             """,
@@ -1160,6 +1199,21 @@ elif page == "Clustering":
                         st.metric("PC2 Explained Variance", f"{variance[1]:.2%}")
                     with v3:
                         st.metric("Total Explained", f"{variance.sum():.2%}")
+
+                    with st.expander("What do PC1 and PC2 explained variance mean?"):
+                        st.write(
+                            """
+                            Principal Component Analysis (PCA) transforms the original features
+                            into new variables called principal components.
+
+                            - **PC1 (Principal Component 1)** captures the largest amount of variation in the data.
+                            - **PC2 (Principal Component 2)** captures the second largest amount of variation.
+                            - **Total Explained Variance** shows how much information is preserved by PC1 and PC2 together.
+
+                            A higher total explained variance means the 2D visualization is a stronger
+                            summary of the original selected features.
+                            """
+                        )
 
                 with tab3:
                     st.subheader("Elbow Plot")
@@ -1264,6 +1318,22 @@ elif page == "PCA Analysis":
                     st.metric("PC2", f"{variance[1]:.2%}")
                 with m3:
                     st.metric("Total Explained", f"{variance.sum():.2%}")
+
+                with st.expander("How should I interpret these PCA metrics?"):
+                    st.write(
+                        """
+                        - **PC1 Explained Variance**: The percentage of total variation captured
+                          by the first principal component. A higher value means PC1 captures more
+                          of the dataset's structure.
+
+                        - **PC2 Explained Variance**: The percentage of variation captured by the
+                          second principal component. This adds additional detail beyond PC1.
+
+                        - **Total Explained Variance**: The combined percentage of information
+                          captured by PC1 and PC2. Higher values indicate that the 2D plot is a
+                          stronger representation of the original selected features.
+                        """
+                    )
 
                 st.subheader("PCA Feature Loadings")
 
@@ -1436,6 +1506,27 @@ elif page == "Hierarchical Analysis":
                 )
 
                 st.dataframe(summary, use_container_width=True)
+
+                st.subheader("Hierarchical Investor Personas Identified by the Model")
+
+                st.write(
+                    "These labels provide a plain-English interpretation of each hierarchical cluster based on average feature values:"
+                )
+
+                for _, row in summary.iterrows():
+                    cluster_id = int(row["hierarchical_cluster"])
+                    cluster_name = name_cluster(row)
+                    interpretation = describe_cluster(row)
+
+                    st.markdown(
+                        f"""
+                        <div class="insight-card">
+                            <strong>Cluster {cluster_id}: {cluster_name}</strong><br>
+                            {interpretation}
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
                 st.subheader("PCA View of Hierarchical Clusters")
 
