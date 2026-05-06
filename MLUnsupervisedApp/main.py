@@ -8,11 +8,16 @@
 # sample investor dataset or upload their own tabular dataset. The app allows
 # users to select numeric features, tune clustering parameters, and interpret
 # results through K-Means clustering, PCA, hierarchical clustering, silhouette
-# scores, elbow plots, and dendrograms.
+# scores, elbow plots, dendrograms, and plain-English investor persona labels.
+#
+# Why this matters:
+# In supervised learning, the model learns from an existing target label.
+# In unsupervised learning, there is no target label. The goal is to discover
+# patterns that may not be obvious at first. This app uses that idea to help
+# users explore how investors may naturally group based on trading behavior,
+# diversification, risk exposure, and portfolio allocation.
 
-# ------------------------------------------------------------
 # 1. Imports
-# ------------------------------------------------------------
 
 # os is used to build file paths that work locally and on Streamlit Cloud.
 import os
@@ -46,9 +51,7 @@ from sklearn.metrics import silhouette_score
 from scipy.cluster.hierarchy import linkage, dendrogram
 
 
-# ------------------------------------------------------------
 # 2. Page Configuration
-# ------------------------------------------------------------
 
 # Configure the browser tab title and make the app use the full page width.
 st.set_page_config(
@@ -56,10 +59,7 @@ st.set_page_config(
     layout="wide",
 )
 
-
-# ------------------------------------------------------------
 # 3. Custom Styling
-# ------------------------------------------------------------
 
 # Custom CSS is used to make the app visually consistent with the user's
 # previous Investment Risk Analyzer app. This creates cleaner spacing,
@@ -101,9 +101,7 @@ st.markdown(
 )
 
 
-# ------------------------------------------------------------
 # 4. File Paths and App Constants
-# ------------------------------------------------------------
 
 # Get the folder where main.py is located. This makes file paths reliable
 # whether the app is running locally or deployed on Streamlit Community Cloud.
@@ -116,6 +114,8 @@ SAMPLE_XLSX_PATH = os.path.join(APP_DIR, "investor_persona_dataset.xlsx")
 
 # These are the intended numeric variables in the investor persona dataset.
 # They describe investor behavior, portfolio allocation, and risk exposure.
+# The app selects these by default because they are meaningful measures of
+# investor similarity for clustering.
 INVESTOR_FEATURES = [
     "portfolio_turnover",
     "avg_holding_period_days",
@@ -128,7 +128,9 @@ INVESTOR_FEATURES = [
 ]
 
 # These columns are useful for identification or explanation, but should not
-# be selected automatically as machine learning features.
+# be selected automatically as machine learning features. For example,
+# investor_id identifies a row but does not describe investor behavior, while
+# cluster labels are outputs from the model rather than inputs.
 NON_FEATURE_COLUMNS = [
     "investor_id",
     "true_persona",
@@ -139,10 +141,7 @@ NON_FEATURE_COLUMNS = [
     "hierarchical_cluster",
 ]
 
-
-# ------------------------------------------------------------
 # 5. Data Creation, Loading, and Cleaning Functions
-# ------------------------------------------------------------
 
 @st.cache_data
 def create_sample_investor_dataset() -> pd.DataFrame:
@@ -246,12 +245,18 @@ def load_sample_data() -> pd.DataFrame:
 
     This design helps prevent deployment errors on Streamlit Cloud.
     """
+    # Prefer the CSV version because CSV files are lightweight and reliable
+    # for Streamlit Community Cloud deployment.
     if os.path.exists(SAMPLE_CSV_PATH):
         return pd.read_csv(SAMPLE_CSV_PATH)
 
+    # Fall back to Excel if the CSV version is not available.
+    # This requires openpyxl in requirements.txt.
     if os.path.exists(SAMPLE_XLSX_PATH):
         return pd.read_excel(SAMPLE_XLSX_PATH)
 
+    # Final fallback: generate a sample dataset directly from code so the app
+    # still works even if no external sample data file is found.
     return create_sample_investor_dataset()
 
 
@@ -277,9 +282,12 @@ def load_uploaded_data(uploaded_file):
 
     file_name = uploaded_file.name.lower()
 
+    # CSV files are read directly with pandas.
     if file_name.endswith(".csv"):
         return pd.read_csv(uploaded_file)
 
+    # Excel files are also supported because many users store tabular data
+    # in spreadsheet format.
     if file_name.endswith(".xlsx") or file_name.endswith(".xls"):
         return pd.read_excel(uploaded_file)
 
@@ -358,9 +366,7 @@ def get_default_features(df: pd.DataFrame) -> list:
     return fallback[: min(8, len(fallback))]
 
 
-# ------------------------------------------------------------
 # 6. Machine Learning Helper Functions
-# ------------------------------------------------------------
 
 def prepare_model_data(df: pd.DataFrame, selected_features: list, scale_data: bool = True):
     """
@@ -375,19 +381,29 @@ def prepare_model_data(df: pd.DataFrame, selected_features: list, scale_data: bo
     distance-based. Without scaling, a feature measured in large units
     such as holding period days could overpower percentage-based features.
     """
+    # Create a copy of selected columns so the original dataframe remains
+    # unchanged for display, downloads, and other app pages.
     X_raw = df[selected_features].copy()
 
-    # Impute missing values so models do not fail on incomplete data.
+    # Impute missing values so clustering algorithms do not fail on incomplete
+    # data. Median imputation is used because it is simple and less sensitive
+    # to extreme values than mean imputation.
     imputer = SimpleImputer(strategy="median")
     X_imputed = imputer.fit_transform(X_raw)
 
     # Standardize features if selected by the user.
+    # This matters because K-Means and hierarchical clustering are distance-based.
+    # Without scaling, large-unit columns such as holding period days could
+    # overpower percentage-based columns such as portfolio turnover.
     if scale_data:
         scaler = StandardScaler()
         X_processed = scaler.fit_transform(X_imputed)
     else:
         X_processed = X_imputed
 
+    # Return both versions:
+    # - X_raw supports interpretation and display.
+    # - X_processed is used by the machine learning models.
     return X_raw, X_processed
 
 
@@ -405,13 +421,19 @@ def run_kmeans(X_processed, k: int, init_method: str = "k-means++"):
                            "k-means++" and "random" to see how initialization
                            can affect clustering results.
     """
+    # random_state makes results reproducible across app reruns.
+    # n_init=10 runs K-Means several times and keeps the best result,
+    # which improves stability.
     model = KMeans(
         n_clusters=k,
         init=init_method,
         random_state=42,
         n_init=10,
     )
+
+    # fit_predict both trains the model and assigns each investor to a cluster.
     labels = model.fit_predict(X_processed)
+
     return labels, model
 
 
@@ -518,9 +540,15 @@ def create_pca_dataframe(X_processed, labels=None):
     as much variance as possible. This makes it easier to visualize clusters
     in a two-dimensional scatterplot.
     """
+    # Use two components because the goal is to create a 2D visualization
+    # that users can easily interpret.
     pca = PCA(n_components=2)
+
+    # fit_transform learns the principal components and transforms the original
+    # high-dimensional feature matrix into PC1 and PC2 coordinates.
     components = pca.fit_transform(X_processed)
 
+    # Store PCA coordinates in a dataframe for easy plotting with Plotly.
     pca_df = pd.DataFrame(components, columns=["PC1", "PC2"])
 
     # Add cluster labels if provided so the PCA plot can be color-coded.
@@ -567,10 +595,16 @@ def create_cluster_summary(df: pd.DataFrame, selected_features: list, labels, cl
     This table helps translate algorithmic cluster labels into meaningful
     behavioral patterns by showing what each group looks like on average.
     """
+    # Combine selected features with cluster labels so we can summarize each
+    # group created by the model.
     summary_df = df[selected_features].copy()
     summary_df[cluster_col] = labels
 
+    # Mean feature values reveal what makes each cluster different.
+    # Rounding keeps the table readable in the app.
     summary = summary_df.groupby(cluster_col)[selected_features].mean().round(3)
+
+    # Count shows how many observations belong to each cluster.
     summary["count"] = summary_df.groupby(cluster_col).size()
 
     # Put count first so users can immediately see cluster size.
@@ -700,9 +734,7 @@ def create_dendrogram(X_processed, labels=None):
     return fig
 
 
-# ------------------------------------------------------------
 # 7. Sidebar Navigation and Dataset Controls
-# ------------------------------------------------------------
 
 with st.sidebar:
     st.markdown("## Menu")
@@ -745,6 +777,8 @@ with st.sidebar:
     st.subheader("Dataset")
 
     # Let users choose between the built-in investor dataset and their own file.
+    # The data source selector lets users either use the curated sample dataset
+    # or upload a custom dataset for their own clustering analysis.
     data_source = st.radio(
         "Choose a data source:",
         ["Use sample investor dataset", "Upload my own dataset"],
@@ -985,9 +1019,7 @@ elif page == "Explore Data":
             st.info("At least two numeric columns are needed for a correlation matrix.")
 
 
-# ------------------------------------------------------------
 # 12. K-Means Clustering Page
-# ------------------------------------------------------------
 
 elif page == "Clustering":
     st.header("K-Means Clustering")
@@ -1022,6 +1054,20 @@ elif page == "Clustering":
                     """
                 )
 
+            with st.expander("Why use K-Means in this application?"):
+                st.write(
+                    """
+                    K-Means is used because it creates clear, interpretable groups based on
+                    similarity. It is especially useful when the goal is to segment investors
+                    into a fixed number of categories, such as investor personas.
+
+                    Compared with more complex clustering methods, K-Means is efficient,
+                    easy to explain, and works well when clusters are relatively separated.
+                    This makes it a strong choice for an interactive app where users need to
+                    quickly understand how investor groups are formed.
+                    """
+                )
+
             # Users choose which numeric variables should define similarity.
             selected_features = st.multiselect(
                 "Select features for clustering",
@@ -1046,6 +1092,9 @@ elif page == "Clustering":
 
                 with c2:
                     # Initialization affects where K-Means begins placing centroids.
+                    # Initialization controls where K-Means begins placing
+                    # cluster centers. Allowing the user to change this supports
+                    # experimentation with model sensitivity.
                     init_method = st.selectbox(
                         "Initialization Method",
                         ["k-means++", "random"],
@@ -1125,6 +1174,29 @@ elif page == "Clustering":
                         """
                     )
 
+                # This expander directly addresses how hyperparameters affect
+                # unsupervised model behavior and interpretation.
+                with st.expander("Why do hyperparameters matter in clustering?"):
+                    st.write(
+                        """
+                        Hyperparameters control how the clustering algorithm behaves and can
+                        directly change the final investor groups.
+
+                        - **Number of clusters (k):** determines how many investor segments the model creates.
+                        - **Feature selection:** defines what similarity means for the model.
+                        - **Standardization:** prevents large-scale variables, such as holding period days, from overpowering percentage-based features.
+                        - **Initialization method:** affects where K-Means begins placing cluster centers.
+
+                        Because unsupervised learning does not have one correct answer, experimenting
+                        with these settings helps users decide which clustering solution is most useful
+                        and interpretable.
+                        """
+                    )
+
+                st.info(
+                    "Clustering results should be interpreted in context. There is no single correct grouping; there are useful patterns based on the selected features and settings."
+                )
+
                 # Tabs organize the major clustering outputs clearly.
                 tab1, tab2, tab3, tab4 = st.tabs(
                     ["Cluster Summary", "PCA Cluster Plot", "Elbow Plot", "Clustered Dataset"]
@@ -1176,6 +1248,20 @@ elif page == "Clustering":
                             </div>
                             """,
                             unsafe_allow_html=True,
+                        )
+
+                    with st.expander("How should I use these persona labels?"):
+                        st.write(
+                            """
+                            The persona labels are interpretations based on the average feature
+                            values within each cluster. They are not official investor categories
+                            or predictions. Instead, they help translate the clustering output into
+                            more understandable business language.
+
+                            Users should compare the persona label with the cluster summary table
+                            to confirm whether the interpretation makes sense for the selected
+                            features and clustering settings.
+                            """
                         )
 
                 with tab2:
@@ -1250,6 +1336,8 @@ elif page == "Clustering":
 
                     st.dataframe(safe_for_display(clustered_df), use_container_width=True)
 
+                    # Export the dataset with K-Means labels so users can
+                    # continue analyzing the results outside the app.
                     st.download_button(
                         label="Download clustered dataset",
                         data=clustered_df.to_csv(index=False).encode("utf-8"),
@@ -1258,9 +1346,7 @@ elif page == "Clustering":
                     )
 
 
-# ------------------------------------------------------------
 # 13. PCA Analysis Page
-# ------------------------------------------------------------
 
 elif page == "PCA Analysis":
     st.header("Principal Component Analysis")
@@ -1277,6 +1363,21 @@ elif page == "PCA Analysis":
             st.write(
                 "PCA reduces multiple numeric features into two main components, making it easier to visualize hidden structure in the dataset."
             )
+
+            # This expander explains why PCA was selected and connects the
+            # technical method to the user-facing visualization.
+            with st.expander("Why choose PCA for this app?"):
+                st.write(
+                    """
+                    PCA is used because investor behavior is described by multiple features,
+                    which are difficult to visualize all at once. PCA reduces those features
+                    into two main components while preserving as much variation as possible.
+
+                    This makes PCA useful for communicating clustering results because users
+                    can see whether investors with similar behavior appear close together in
+                    a simplified two-dimensional space.
+                    """
+                )
 
             selected_features = st.multiselect(
                 "Select features for PCA",
@@ -1335,6 +1436,20 @@ elif page == "PCA Analysis":
                         """
                     )
 
+                with st.expander("Why does explained variance matter?"):
+                    st.write(
+                        """
+                        Explained variance tells users how much information from the original
+                        selected features is captured by the PCA plot. If PC1 and PC2 explain a
+                        high percentage of the variance, then the 2D plot is a better summary of
+                        the original feature space.
+
+                        If the total explained variance is low, the PCA plot can still be useful,
+                        but users should be more cautious because some information is not visible
+                        in the two-dimensional view.
+                        """
+                    )
+
                 st.subheader("PCA Feature Loadings")
 
                 # Loadings show how much each original feature contributes to
@@ -1369,9 +1484,7 @@ elif page == "PCA Analysis":
                     )
 
 
-# ------------------------------------------------------------
 # 14. Hierarchical Clustering Page
-# ------------------------------------------------------------
 
 elif page == "Hierarchical Analysis":
     st.header("Hierarchical Clustering")
@@ -1400,6 +1513,22 @@ elif page == "Hierarchical Analysis":
                     Using both methods provides a richer view of investor behavior because
                     K-Means gives clear segment assignments, while the dendrogram reveals
                     relationships between observations.
+                    """
+                )
+
+            # This expander explains why hierarchical clustering is included
+            # alongside K-Means.
+            with st.expander("Why choose hierarchical clustering?"):
+                st.write(
+                    """
+                    Hierarchical clustering is included because it shows the relationships
+                    between investors before reducing them into final groups. This makes it
+                    useful for exploring whether certain investors are very similar, loosely
+                    related, or clearly separated.
+
+                    It complements K-Means because K-Means gives a fast final segmentation,
+                    while hierarchical clustering provides a more detailed view of how those
+                    groups may naturally form.
                     """
                 )
 
@@ -1434,11 +1563,17 @@ elif page == "Hierarchical Analysis":
 
                 # Agglomerative clustering builds clusters from the bottom up,
                 # repeatedly merging similar observations or groups.
+                # Agglomerative clustering builds groups from the bottom up by
+                # repeatedly merging similar observations or clusters.
+                # Ward linkage attempts to minimize within-cluster variance,
+                # which often produces compact, interpretable groups.
                 hierarchical_model = AgglomerativeClustering(
                     n_clusters=num_clusters,
                     linkage="ward",
                 )
 
+                # Assign observations to hierarchical clusters and evaluate
+                # separation using the same silhouette metric as K-Means.
                 labels = hierarchical_model.fit_predict(X_processed)
                 silhouette = calculate_silhouette(X_processed, labels)
 
@@ -1554,6 +1689,8 @@ elif page == "Hierarchical Analysis":
                         """
                     )
 
+                # Export the dataset with hierarchical cluster labels for
+                # additional analysis or reporting.
                 st.download_button(
                     label="Download hierarchical clustered dataset",
                     data=clustered_df.to_csv(index=False).encode("utf-8"),
